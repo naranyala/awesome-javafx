@@ -304,22 +304,11 @@ The table below distinguishes **direct native equivalents**, **Java standard alt
 | `libloading` | Runtime loading of shared libraries | `System.load`, `System.loadLibrary`, JNA, FFM `Linker`/`SymbolLookup` | Direct capability equivalent, with different safety and symbol-resolution models |
 | `bindgen`, `cbindgen`, `cc`, `cmake`, `pkg-config` | Native binding/build generation | JNI headers, JNAerator, FFM declarations, Maven/Gradle native plugins, CMake/NMake integration | Build tooling equivalent is fragmented; no single Java standard workflow |
 
-#### How to interpret the table
+#### Choosing the Java access path
 
-- **Standard Java alternative:** Java provides a managed API with a similar purpose, such as `HttpClient`, JSSE, Java Sound, JDBC, Java2D, or `java.util.zip`. It may use a different implementation and may intentionally hide operating-system details.
-- **Direct native access:** Java can call the same C library used by a Rust crate. This is useful when exact compatibility, a specialized feature, or an existing native deployment is required, but it introduces ABI, architecture, memory ownership, and packaging concerns.
-- **Third-party Java binding:** A Java library may wrap the same C/C++ project or provide a JVM-native implementation. Check release freshness, supported JDKs, native classifiers, licenses, and target platforms.
-- **Near-equivalent:** Both libraries solve the same product problem but differ in behavior, performance, threading, licensing, feature coverage, or programming model.
+Prefer a standard API such as `HttpClient`, JSSE, Java Sound, JDBC, Java2D, or `java.util.zip` when it meets the requirement. Otherwise use an established binding, JNA for small stable calls, JNI for high-throughput or precise integrations, or FFM for modern native access on supported JDKs. Check release freshness, JDK support, native classifiers, licenses, and target platforms.
 
-#### FFI choices in Java
-
-1. **Prefer a standard Java API** when it meets the requirement. It is usually easier to package and maintain than a native dependency.
-2. **Use an established Java binding** when the ecosystem has one, such as JDBC, JGit, JavaCV, LWJGL, JNA, or a maintained GTK/Qt binding.
-3. **Use JNA** for relatively small and stable native calls where development speed matters more than minimum overhead.
-4. **Use JNI or generated bindings** for high-volume calls, callbacks, precise lifecycle control, or an existing native integration team.
-5. **Evaluate FFM** for modern Java native access where the supported JDK and API maturity are acceptable. It can avoid much JNI boilerplate, but it does not remove ABI or safety responsibility.
-
-Rust’s ownership and type system can make a wrapper around a C library safer to use, but the underlying C ABI remains a native boundary. Java’s managed runtime can make object integration convenient, but JNI/JNA/FFM calls still require careful handling of pointers, callbacks, threads, buffers, native resources, and crash behavior.
+Rust wrappers can make a C library safer to use, but the ABI remains a native boundary. Java’s JNI/JNA/FFM calls likewise require care with pointers, callbacks, threads, buffers, native lifetimes, and crash behavior.
 
 ### Maturity comparison
 
@@ -334,15 +323,6 @@ Rust’s main ecosystem risks are different:
 - many projects depend on a small maintainer group or on bindings to another ecosystem;
 - APIs can evolve more quickly, especially in declarative frameworks;
 - cross-compilation, native runtime libraries, installers, code signing, and auto-update still require platform-specific engineering.
-
-### Practical equivalence guide
-
-- **Swing replacement:** egui for tools, Slint/iced for declarative applications, or GTK/FLTK for widget-oriented applications.
-- **JavaFX replacement:** Slint or iced for a Rust-native declarative UI; egui when immediate-mode rendering is acceptable.
-- **SWT replacement:** GTK-rs on Linux, FLTK for a portable widget toolkit, or direct platform bindings for a single operating system.
-- **Compose replacement:** iced, Slint, or Dioxus, depending on whether native rendering, a dedicated UI language, or web technologies are preferred.
-- **JavaFX WebView replacement:** Tauri.
-- **AWT/native integration replacement:** winit/tao plus platform crates such as `windows-rs`, `objc2`, or Wayland/X11 bindings.
 
 In short, Java is generally the lower-risk choice for a conventional, long-lived enterprise desktop UI with many mature widgets. Rust is compelling when binary deployment, performance, native integration, memory safety, shared systems code, or a web frontend is more important—and when the team is willing to validate the chosen GUI toolkit rather than relying on a single standard platform path.
 
@@ -425,22 +405,7 @@ Some capabilities are provided by the operating system or an external technology
 
 Java and Rust are integration layers around these facilities. A toolkit may hide them, wrap them, emulate them, or expose them directly, but it cannot make platform differences disappear.
 
-### How to compare an apparent equivalent
-
-When two libraries appear equivalent, compare them across all of these dimensions:
-
-1. **Windowing:** can it create windows, dialogs, multiple monitors, fullscreen modes, and tray icons on every target?
-2. **Controls:** does it include the exact table, tree, editor, docking, chart, rich text, and printing features required?
-3. **Rendering:** is it native, custom-rendered, GPU-backed, web-based, immediate-mode, or retained-mode?
-4. **Input:** does it support keyboard navigation, IME, text selection, shortcuts, drag and drop, touch, and gamepads?
-5. **Accessibility:** are roles, names, focus, screen readers, high contrast, and scaling supported on each OS?
-6. **Concurrency:** how do background tasks, cancellation, async I/O, and UI handoff work?
-7. **Interop:** how difficult is it to call OS APIs, distribute native libraries, and handle ABI changes?
-8. **Packaging:** what is the runtime size, installer workflow, update story, signing process, and offline behavior?
-9. **Maintenance:** who owns the project, how often is it released, how many maintainers exist, and how are breaking changes handled?
-10. **Testing:** can the hardest screen be tested on real Windows, macOS, and Linux environments rather than only in a headless CI job?
-
-Therefore, the correct conclusion is not “Rust has a Swing” or “Java has a Tauri.” The accurate statement is that both ecosystems can build desktop software, but they package the responsibilities differently: Java provides more cohesive, historically mature desktop choices, while Rust provides a stronger native foundation and several independent UI approaches with different trade-offs.
+Therefore, the correct conclusion is not “Rust has a Swing” or “Java has a Tauri.” Both ecosystems can build desktop software, but they package responsibilities differently: Java provides more cohesive, historically mature desktop choices, while Rust provides a stronger native foundation and several independent UI approaches with different trade-offs. Compare apparent equivalents by windowing, controls, rendering, input, accessibility, concurrency, interop, packaging, maintenance, and real cross-platform testing.
 
 ## Detailed Java versus Rust GUI comparison
 
