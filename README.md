@@ -283,6 +283,44 @@ Then distribute a platform-specific shared library and declare the ABI through F
 
 For larger integrations, consider a command/service boundary or a generated protocol instead of embedding native code in the UI process. A process boundary can contain crashes and simplify upgrades, at the cost of IPC latency and deployment complexity.
 
+## C/C++ libraries relevant to desktop GUI applications
+
+JavaFX is often sufficient for the UI, while a C or C++ library supplies a specialized native capability. The library may be used directly through FFI, through an existing Java binding, or behind a small native helper process.
+
+| Library/ecosystem | Language | Desktop use | JavaFX integration path |
+|---|---|---|---|
+| **Qt / Qt Widgets / Qt Quick** | C++ | Full widget toolkit, model/view, graphics, networking, multimedia, and desktop utilities | Qt Jambi for Java Qt applications; otherwise keep Qt as a separate UI or expose selected services through JNI/FFM. Mixing a Qt event loop directly into JavaFX is complex. |
+| **GTK 3/4** | C | Native Linux/GNOME widgets, dialogs, accessibility, and desktop integration | GTK Java bindings, SWT, or native FFI. Use JavaFX for the main UI unless native GTK behavior is a requirement. |
+| **libadwaita** | C | GNOME design system and adaptive GTK controls | GTK bindings or a native helper; target Linux/GNOME explicitly. |
+| **wxWidgets** | C++ | Cross-platform native-looking widgets | wxWidgets Java bindings are uncommon and maintenance varies; use JNI/FFM only when its native behavior is essential. |
+| **FLTK** | C++ | Small, portable traditional widget toolkit | FLTK Java bindings or JNA/JNI/FFM; usually choose JavaFX instead for a Java-first application. |
+| **JUCE** | C++ | Audio tools, plugins, media applications, custom controls, and cross-platform windows | JavaFX can host the application shell while JUCE runs as a native component/service, but view embedding and licensing require careful review. |
+| **Dear ImGui** | C++ | Immediate-mode tools, editors, debug panels, and graphics utilities | Java bindings exist; integrate through LWJGL/JavaCPP or a native surface. It is not a replacement for JavaFX’s accessible business controls. |
+| **Nuklear** | C | Small immediate-mode GUI | Native binding or generated FFI; useful for specialized tools, not a general JavaFX control replacement. |
+| **SDL2 / SDL3** | C | Windows, input, audio, game controllers, OpenGL/Vulkan/Metal contexts | LWJGL, JavaCPP, JNA/JNI/FFM, or a separate native rendering surface. SDL is not a widget toolkit. |
+| **GLFW** | C | Windows, input, and graphics contexts | LWJGL or native FFI. Combine with OpenGL/Vulkan/wgpu-style rendering rather than JavaFX controls. |
+| **raylib** | C | Lightweight graphics, games, simulations, and interactive tools | Java bindings or native FFI; use a separate rendering window or embed only with platform-specific work. |
+| **Skia** | C++ | 2D rendering, text, images, and GPU-backed drawing | Skija, JavaCPP, LWJGL, or JNI/FFM. Useful for custom JavaFX-adjacent rendering, but it does not provide JavaFX controls. |
+| **Cairo / Pango / HarfBuzz** | C | 2D drawing, text layout, shaping, and font processing | Java2D/JavaFX cover common needs; use JavaCPP/JNA/JNI/FFM for exact native behavior. |
+| **OpenGL / Vulkan / DirectX / Metal** | C APIs / C++ ecosystems | GPU rendering and compute | LWJGL, JOGL, JavaCPP, or FFM. Keep rendering isolated from ordinary JavaFX controls and benchmark synchronization costs. |
+| **WebView2 / WebKitGTK / Chromium / CEF** | C/C++ APIs | Embedded browser engines and web content | JavaFX WebView, JCEF, JxBrowser, SWT Browser, or native FFI. Engine version, sandboxing, licensing, and bundle size matter. |
+| **FFmpeg / GStreamer** | C | Audio/video codecs, demuxing, capture, streaming, and transcoding | JavaCV, vlcj, GStreamer Java bindings, JavaCPP, or JNI/FFM. Prefer JavaFX Media only when its supported formats and controls are sufficient. |
+| **OpenAL / PortAudio / RtAudio** | C/C++ | Low-level and cross-platform audio | Java Sound or JavaFX Media for ordinary playback; LWJGL/JavaCPP/native bindings for low latency or device control. |
+| **libusb / HIDAPI** | C | USB, HID, controllers, scanners, and custom hardware | usb4java, hid4java, JavaCPP, or JNI/FFM; isolate device I/O from the JavaFX thread. |
+| **SQLite / PostgreSQL libpq / MySQL client** | C | Embedded or native database access | Prefer JDBC drivers; use native bindings only for a specific extension, performance requirement, or existing native component. |
+| **OpenSSL / mbedTLS / libsodium** | C | TLS, cryptography, certificates, and secure primitives | Prefer JSSE, Bouncy Castle, or a maintained Java provider; use native FFI only when compliance or a required primitive demands it. |
+
+### Choosing how to use a C/C++ GUI library
+
+- **Use a Java binding** when it is maintained, supports the target JDK and platforms, and provides the required widget or native API.
+- **Use JavaFX plus native services** when JavaFX should own the UI and the C/C++ library only provides codecs, hardware, rendering, or computation.
+- **Use a native child process** when crash containment, an existing C++ application, or incompatible event loops make in-process FFI risky.
+- **Use a custom JavaFX `Node` or `Canvas` bridge** only when input, focus, resizing, GPU context ownership, and accessibility are fully defined.
+- **Avoid mixing event loops casually:** Qt, GTK, SDL, JUCE, WebKit, and JavaFX each have lifecycle and thread-affinity rules.
+- **Check licenses and redistribution:** Qt, JUCE, Chromium/CEF, FFmpeg, codecs, GPU drivers, and platform SDKs can impose materially different obligations.
+
+A C/C++ library is not automatically a JavaFX competitor. Qt, GTK, wxWidgets, FLTK, and JUCE are GUI platforms; SDL, GLFW, Skia, Cairo, OpenGL, Vulkan, FFmpeg, and libusb are supporting technologies. JavaFX can replace the widget layer while using the latter group behind carefully designed Java services.
+
 ## Packaging and deployment
 
 JavaFX is a runtime dependency and must be included in the delivered application.
