@@ -409,169 +409,74 @@ Therefore, the correct conclusion is not “Rust has a Swing” or “Java has a
 
 ## Detailed Java versus Rust GUI comparison
 
-The language is only one part of the decision. The selected toolkit determines the rendering model, widget behavior, accessibility story, packaging requirements, and how much platform-specific code the application needs.
+The toolkit matters more than the language alone. Compare the complete product path: rendering, controls, input, accessibility, native integration, packaging, and maintenance.
 
-### 1. Application architecture
-
-**Java desktop applications** commonly use an object-oriented component hierarchy:
-
-- Swing uses components, models, renderers, listeners, and the EDT.
-- JavaFX uses nodes, properties, bindings, observable collections, CSS, FXML, and an application thread.
-- SWT uses native controls and an explicit display/event-loop model.
-- Dependency injection, service layers, MVC/MVP/MVVM patterns, and mature enterprise libraries are readily available.
-
-**Rust desktop applications** commonly use one of three styles:
-
-- **Immediate mode:** the view is rebuilt from application state every frame, as in egui. This is simple for tools but differs from traditional widget mutation.
-- **Elm/Redux/message-driven:** events produce messages, messages update state, and the view is derived from state, as in iced and many Slint designs.
-- **Native object/widget bindings:** GTK-rs, FLTK, or platform APIs expose controls and callbacks more directly.
-
-Rust’s ownership model encourages explicit state ownership and message passing. This can prevent accidental shared mutable state, but GUI code may require more event plumbing, cloning of handles, lifetime management, or carefully designed application state.
-
-### 2. Rendering and visual behavior
+### Comparison by concern
 
 | Concern | Java | Rust |
 |---|---|---|
-| Default model | Swing/SWT widgets or JavaFX scene graph | Immediate mode, retained/declarative, native bindings, or webview |
-| Rendering consistency | Swing and JavaFX are relatively consistent across systems | Depends heavily on the toolkit; custom renderers are consistent, native bindings are not |
-| Native appearance | Strongest with SWT; configurable with Swing; JavaFX is custom-rendered | Strongest with GTK/platform bindings; egui, Slint, and iced generally render their own controls |
-| Custom drawing | `Graphics2D`, JavaFX Canvas/scene graph | `wgpu`, Skia-based frameworks, toolkit drawing APIs, or custom renderers |
-| Text and input complexity | Mature APIs, though toolkit-specific issues still exist | Varies substantially; text shaping, IME, RTL, and accessibility must be tested per toolkit |
-| GPU dependence | JavaFX may use hardware acceleration; Swing is primarily CPU-rendered | Many modern toolkits use wgpu/Skia/GPU paths, but fallback and driver behavior vary |
+| **Architecture** | Swing/SWT use components and callbacks; JavaFX uses a scene graph, properties, CSS, and FXML. | egui is immediate-mode; iced/Slint are declarative/message-driven; GTK-rs/FLTK expose native-style widgets. |
+| **Rendering** | Swing is Java-rendered, SWT uses native controls, and JavaFX has a retained scene graph. | Custom-rendered toolkits provide consistency; native bindings provide platform behavior; webviews add browser capabilities. |
+| **Widgets** | Mature tables, trees, editors, dialogs, printing, drag/drop, and third-party enterprise components. | Capabilities vary by crate; GTK has the broadest native widget ecosystem, while egui is especially productive for tools. |
+| **Threading** | UI updates belong on the EDT, JavaFX thread, or SWT display thread. | UI state belongs to the toolkit event loop; `Send`/`Sync` catch many invalid cross-thread designs at compile time. |
+| **Runtime** | Bundle a JVM with `jlink`/`jpackage`; GC simplifies lifetime management. | Ship native binaries; deterministic destruction and no tracing GC, but toolkit/webview memory still dominates many apps. |
+| **Accessibility** | Long-established APIs and tested controls, although custom components still need work. | GTK and semantic web UIs are strongest; custom-rendered crates require more validation. |
+| **Testing** | Mature JUnit, TestFX/Jemmy, profiling, and IDE tooling. | Excellent Cargo/Clippy/rustfmt tooling, but GUI automation and cross-platform accessibility testing are less standardized. |
+| **Deployment** | Runtime modules, native classifiers, signing, and notarization must be managed. | Native binaries simplify the runtime story, but installers, native dependencies, signing, and updates remain platform-specific. |
 
-A custom-rendered UI can look identical on every platform, but it must implement more behavior itself: focus rings, keyboard navigation, accessibility roles, text selection, context menus, drag and drop, and platform conventions. Native widgets provide more behavior automatically but vary visually and functionally.
+### Architecture and responsiveness
 
-### 3. Widget completeness
+Java commonly uses an object-oriented component/model hierarchy. Rust commonly uses immediate-mode state, Elm-style messages, or native widget bindings. Both need a responsive event loop: move database, filesystem, network, and process work off the UI thread and return results through a controlled state update.
 
-Java’s conventional toolkits have mature implementations of forms, menus, trees, tables, text editors, dialogs, printing, drag and drop, file choosers, and accessibility hooks. Swing’s model/delegate architecture also makes large tables and specialized renderers well understood.
+Java is usually quicker to prototype because object references and mature conventions are easy to share. Rust requires more explicit ownership, channels, cancellation, and UI handoff, but catches many lifetime and data-race errors before runtime.
 
-Rust toolkits differ more:
+### FFI and native-library integration
 
-- egui has a strong set of practical controls for tools and dashboards, but it is not a complete native enterprise widget suite;
-- iced and Slint provide common controls, but specialized controls may need custom work or third-party crates;
-- GTK-rs inherits GTK’s broad widget ecosystem and accessibility infrastructure, especially on Linux;
-- Tauri delegates the widget problem to HTML/CSS, gaining web ecosystem breadth while introducing browser and frontend complexity;
-- FLTK-rs provides traditional widgets but has a smaller ecosystem than Java Swing or GTK.
+Java and Rust can use the same C libraries; the difference is how the boundary is expressed and packaged.
 
-For a database administration tool, IDE, form-heavy ERP client, or accessibility-sensitive application, compare the exact widgets needed rather than comparing framework names.
-
-### 4. Threading, async work, and responsiveness
-
-Both languages require UI work to stay on the UI event thread.
-
-**Java:**
-
-- Swing has the Event Dispatch Thread; use `SwingWorker`, executors, or structured concurrency patterns for background work.
-- JavaFX has the JavaFX Application Thread; use `Task`, `Service`, executors, or carefully integrated async libraries.
-- SWT requires UI access on its display thread.
-- Blocking database, filesystem, network, or process work on the UI thread causes freezes regardless of toolkit.
-
-**Rust:**
-
-- GTK and native toolkits have a main context/event loop; UI objects generally must be used on the appropriate thread.
-- Tokio or another async runtime can perform I/O, but its executor must be integrated with the GUI event loop rather than blocking it.
-- `Send` and `Sync` rules catch many unsafe cross-thread designs at compile time.
-- GUI handles, callbacks, and non-`Send` UI state can still make architecture difficult, especially when work must return to the main thread.
-
-Java often makes thread handoff easier to write but easier to get wrong at runtime. Rust makes invalid sharing harder to express but can require more explicit coordination.
-
-### 5. Memory, startup, and runtime footprint
-
-A native Rust release usually starts quickly and can be distributed as a self-contained executable plus required assets. Its memory use is not automatically small: a GUI toolkit, webview, GPU stack, fonts, and caches can dominate the application.
-
-Java applications require a JVM runtime. A full JVM can increase installation size and startup time, but `jlink`, `jpackage`, class-data sharing, and toolkit-specific optimizations can make the result practical. Java’s garbage collector simplifies object lifetime and is usually adequate for business UIs, though allocation spikes, large tables, and embedded browsers still need profiling.
-
-Rust has deterministic destruction and no tracing garbage collector. This is valuable for resource-heavy or latency-sensitive software, but reference-counted UI graphs, caches, async tasks, and native handles still need explicit lifecycle design. Rust does not eliminate memory leaks; cycles, forgotten tasks, and native resources can still leak.
-
-### 6. Native integration
-
-Java native integration typically uses:
-
-- standard AWT/Desktop APIs;
-- JNA or JNI;
-- Java Native Access or generated bindings;
-- the Foreign Function and Memory API in newer Java releases;
-- toolkit-specific native libraries such as SWT.
-
-Rust can use direct bindings such as `windows-rs`, `objc2`, GTK-rs, Wayland, X11, or generated FFI. The Rust compiler can verify many data and ownership rules around the boundary, but FFI definitions, ABI compatibility, unsafe code, and native lifetime assumptions remain the developer’s responsibility.
-
-Java is often easier when a stable Java library already exists. Rust is often better when the application must expose a large native API or share low-level code with another native product.
-
-### 7. Packaging, signing, and updates
-
-| Area | Java approach | Rust approach |
-|---|---|---|
-| Runtime | Bundle a JRE with `jpackage` or create a `jlink` image | Ship a native executable and toolkit/webview/native dependencies |
-| Installer | `jpackage`, platform packaging tools, vendor tools | Tauri, cargo-packager, cargo-bundle, WiX, NSIS, AppImage, deb/rpm, DMG tooling |
-| Cross-compilation | Usually build/test per target; native toolkit artifacts matter | Usually build/test per target; native dependencies and linker/toolchain matter |
-| Code signing | Sign the installer and application bundle; macOS notarization required | Same requirement; native binaries do not avoid signing or notarization |
-| Auto-update | Third-party or application-specific | Tauri and other tools provide options, but policy and security remain application-specific |
-| Reproducibility | Pin JDK, modules, dependencies, and packaging tools | Pin Rust toolchain, Cargo.lock, crates, native SDKs, and frontend assets |
-
-Neither language makes distribution automatic. Windows SmartScreen, macOS Gatekeeper/notarization, Linux desktop integration, update rollback, permissions, and architecture-specific testing are product responsibilities.
-
-### 8. Accessibility and internationalization
-
-Java’s long-lived toolkits have established accessibility APIs and support for keyboard navigation, focus, localization, Unicode, and screen readers. Quality still varies by toolkit and custom component, and Swing applications must not assume that a custom renderer is accessible.
-
-Rust’s accessibility situation is toolkit-dependent. GTK benefits from mature Linux accessibility infrastructure. Webview applications can use browser accessibility features but must maintain semantic HTML and test system webviews. Custom-rendered egui, iced, or game-oriented interfaces may require additional accessibility work and should be tested with the target screen readers, high-contrast modes, keyboard-only navigation, scaling, RTL text, and input methods.
-
-This is one of the clearest areas where a mature Java or GTK widget toolkit can reduce risk compared with a young custom-rendered Rust framework.
-
-### 9. Error handling and reliability
-
-Java commonly uses exceptions for startup failures, I/O, reflection, and toolkit operations. Uncaught exceptions on the UI thread can leave an application partially functional, so production applications need centralized logging and error reporting.
-
-Rust makes recoverable failures explicit with `Result` and `Option`. This encourages deliberate handling of file, network, parsing, and configuration failures, but GUI code can become verbose if errors are not given a consistent presentation layer. Panics, poisoned state, FFI faults, and process-level failures still need crash reporting and recovery policies.
-
-The practical difference is not that Rust cannot fail or Java is unreliable. Rust moves more failure and ownership decisions into compilation; Java provides faster prototyping and a larger set of established runtime conventions.
-
-### 10. Testing and tooling
-
-Java has mature GUI testing and profiling options, including JUnit, AssertJ, Mockito, TestFX, Jemmy, FEST-derived tools, VisualVM, Java Flight Recorder, profilers, and IDE integration. Headless testing is possible but can differ from real display behavior.
-
-Rust has Cargo’s integrated test workflow, unit and integration tests, criterion benchmarks, Clippy, rustfmt, sanitizers, Miri for selected code, tracing, and tools such as `cargo-deny` and `cargo-audit`. GUI-specific testing is less standardized. Teams often separate pure state/update tests from a smaller number of platform-level UI tests, screenshot tests, accessibility tests, and manual checks.
-
-A good architecture in either language keeps business rules, persistence, networking, and state transitions testable without creating windows.
-
-### 11. Long-term maintenance risks
-
-**Java risks:**
-
-- Swing and AWT are stable but visually dated and mostly feature-frozen;
-- JavaFX must be versioned and distributed separately from the JDK;
-- SWT requires native artifacts for each target platform;
-- large Java dependency graphs and reflective frameworks can complicate modular packaging;
-- JVM and embedded-browser footprint may be larger than desired.
-
-**Rust risks:**
-
-- the GUI ecosystem has no universally dominant toolkit;
-- a crate may be actively developed but still have incomplete desktop behavior;
-- breaking changes can require migration work when a toolkit is young;
-- FFI bindings track external C/C++ libraries and platform APIs;
-- accessibility, printing, IME, and native desktop details may be less mature than core rendering;
-- Cargo dependencies and native build scripts can make reproducible release builds complex.
-
-Before selecting either stack, inspect recent releases, issue response, supported operating systems, bus factor, license, security advisories, documentation, examples, and whether the toolkit is used in applications similar to yours.
-
-### 12. Decision matrix by application type
-
-| Application type | Usually safer Java choice | Usually promising Rust choice | Main qualification |
+| Layer | Java | Rust | Main risk |
 |---|---|---|---|
-| Enterprise forms and CRUD | Swing, JavaFX, SWT | GTK-rs, Slint, Tauri | Verify tables, validation, printing, accessibility, and reporting. |
-| IDE or developer tool | Swing, SWT/JFace, JavaFX | egui, iced, Tauri, GTK-rs | Docking, editors, keyboard shortcuts, and large trees are critical. |
-| Data visualization | JavaFX, Swing plus chart libraries | egui, iced, Slint, Tauri | Benchmark rendering and large datasets. |
-| Linux/GNOME application | GTK-rs or JavaFX | GTK-rs/Relm4/libadwaita | Native desktop integration favors GTK on Linux. |
-| Windows-only utility | Swing/JavaFX or native SWT | windows-rs, native-windows-gui, egui | Direct Win32 integration favors Rust; portability favors Java. |
-| macOS-native utility | JavaFX/Swing with native adapters | objc2/AppKit bindings, Tauri | Test menus, sandboxing, notarization, and text input. |
-| Cross-platform consumer app | JavaFX or Compose | Tauri, Slint, iced | Validate visual consistency, updates, and installer UX. |
-| Graphics editor or game tool | JavaFX, LWJGL | egui, wgpu, bevy, iced | Rendering architecture matters more than standard widgets. |
-| Embedded desktop/industrial UI | JavaFX or SWT where supported | Slint, egui, GTK-rs | Check GPU, RAM, input, offline installation, and vendor support. |
-| Accessibility-critical software | SWT, Swing/JavaFX with tested controls | GTK-rs or semantic Tauri UI | Do not assume custom-rendered Rust controls are accessible. |
+| **Platform API** | AWT/SWT/JavaFX, JNA, JNI, or FFM | `windows-rs`, `objc2`, GTK-rs, Wayland/X11 crates, raw C ABI | OS version and platform ABI differences |
+| **C library binding** | JNA for simple calls; JNI or generated FFM layouts for precise/high-volume calls | Safe wrapper over `extern "C"` declarations, often generated with bindgen | Struct layout, calling convention, symbol names, and version skew |
+| **Callbacks** | JNI/JNA callbacks, native global references, explicit thread attachment | `extern "C"` callbacks, owned context pointers, `unsafe` synchronization | Callback lifetime, thread affinity, reentrancy, and shutdown races |
+| **Buffers and strings** | Direct buffers, arrays, `MemorySegment`, UTF-8/UTF-16 conversion | slices, raw pointers, `CStr`/`CString`, explicit encoding | Ownership, mutability, alignment, null termination, and leaks |
+| **Errors** | Return codes/exceptions crossing a managed/native boundary | `Result` in the safe wrapper; never let a panic cross FFI | Lost error context, unwinding, and native process crashes |
+| **Resources** | `AutoCloseable`, cleaners as a fallback, explicit native handles | `Drop`, RAII guards, ownership types | Double release, use-after-free, and shutdown ordering |
+| **Distribution** | Native classifiers per OS/architecture, `System.load*`, installer/runtime packaging | Cargo build scripts, `links`, `pkg-config`, bundled or system libraries | Missing shared libraries, ABI compatibility, signing, and licenses |
+
+A practical Java FFI decision order is:
+
+1. Prefer a standard API: JSSE, `HttpClient`, JDBC, Java Sound, Java2D, or `java.util.zip`.
+2. Prefer a maintained binding: LWJGL, JGit, JavaCV, JNA, or a supported GTK/Qt binding.
+3. Use **JNA** for small, stable, low-frequency calls where simplicity matters.
+4. Use **JNI or FFM** for high-throughput calls, callbacks, exact layouts, or large native APIs. FFM reduces JNI boilerplate but does not remove ABI or safety responsibilities.
+5. Isolate all native calls behind a small Java interface and test each target OS and architecture.
+
+Rust’s wrapper may make a C API safer for Rust callers, but the underlying C library remains unsafe at the boundary. Java’s managed memory makes object integration convenient, but native pointers, callbacks, threads, buffers, and handles still need explicit ownership rules. In both languages, pin the native version, verify the license, test failure paths, and avoid exposing raw FFI types throughout the UI.
+
+### Performance, packaging, and operations
+
+Rust often has a faster cold start and a smaller baseline runtime, but GPU drivers, webviews, fonts, caches, and media libraries can dominate real memory use. Java startup and footprint can be reduced with `jlink`, class-data sharing, and careful dependencies; GC is normally adequate for business UIs. Benchmark the packaged application rather than comparing empty windows.
+
+Both ecosystems need per-platform builds or carefully maintained cross-compilation, native dependency discovery, code signing, macOS notarization, update rollback, crash reporting, and installer testing. A native Rust executable does not remove these product responsibilities, and a bundled Java runtime does not necessarily make deployment impractical.
+
+### Accessibility, testing, and maintenance
+
+Java’s mature controls are generally the lower-risk choice for screen readers, keyboard navigation, high contrast, printing, and complex forms. GTK and semantic HTML/Tauri can also be strong. Custom-rendered egui, iced, Slint, or graphics interfaces need explicit testing for roles, focus, text scaling, IME, RTL text, and screen readers.
+
+Keep business logic, persistence, networking, and state transitions independent of windows in either language. Test the hardest screen on real Windows, macOS, and Linux systems, including a large table/editor, background cancellation, file dialogs, native menus, packaging, and upgrade behavior.
+
+### Decision matrix
+
+| Application | Lower-risk Java choice | Promising Rust choice | Verify first |
+|---|---|---|---|
+| Enterprise forms/CRUD | Swing, JavaFX, SWT | GTK-rs, Slint, Tauri | Tables, printing, accessibility, reports |
+| IDE/developer tool | Swing, SWT/JFace, JavaFX | egui, iced, Tauri, GTK-rs | Docking, editors, shortcuts, large trees |
+| Linux/GNOME app | SWT or JavaFX | GTK-rs/Relm4/libadwaita | Native integration and packaging |
+| Windows/macOS utility | JavaFX/SWT with adapters | `windows-rs`, `objc2`, egui, Tauri | Menus, sandboxing, signing, text input |
+| Cross-platform consumer app | JavaFX or Compose | Tauri, Slint, iced | Visual consistency, updates, webview behavior |
+| Graphics/game tool | JavaFX/LWJGL | egui, wgpu, bevy | Rendering, GPU fallback, input |
 
 ### Bottom line
 
-Java currently offers the more predictable **desktop application platform**: several mature toolkits, established widget behavior, extensive libraries, and known enterprise deployment patterns. Rust offers the more flexible **native application foundation**: excellent control over binaries and system APIs, strong compile-time guarantees, and the ability to combine a native backend with a custom, declarative, or web frontend.
-
-For a serious project, compare a small vertical slice—not just a hello-world window. Implement the hardest screen, a large table or editor, keyboard navigation, accessibility labels, background work, file dialogs, native menus, packaging, signing, and an upgrade path. The result will reveal the real difference between Java GUI and Rust GUI far better than benchmark numbers or framework popularity.
+Java is the more predictable desktop application platform: mature widgets, established accessibility, broad libraries, and known enterprise deployment patterns. Rust is the more flexible native foundation: strong compile-time guarantees, direct system access, self-contained binaries, and multiple UI models. Choose by the hardest required feature and the support policy of the specific toolkit, not by language reputation or a hello-world benchmark.
