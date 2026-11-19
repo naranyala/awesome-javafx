@@ -49,6 +49,240 @@ Application
 
 JavaFX UI objects must be accessed on the **JavaFX Application Thread**. Long-running work must run elsewhere and publish results back to that thread.
 
+## Minimal implementation examples
+
+### A window with a button
+
+```java
+import javafx.application.Application;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.stage.Stage;
+
+public class HelloApp extends Application {
+    @Override
+    public void start(Stage stage) {
+        Button button = new Button("Click me");
+        button.setOnAction(event -> button.setText("Clicked"));
+
+        stage.setScene(new Scene(button, 300, 180));
+        stage.setTitle("Hello JavaFX");
+        stage.show();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+```
+
+### A small form and layout
+
+```java
+VBox form = new VBox(10,
+    new Label("Name"),
+    new TextField(),
+    new Button("Save")
+);
+form.setPadding(new Insets(16));
+
+Scene scene = new Scene(form, 320, 180);
+stage.setScene(scene);
+stage.show();
+```
+
+The imports for this example are `javafx.geometry.Insets`, `javafx.scene.control.*`, and `javafx.scene.layout.VBox`.
+
+### Binding a label to input
+
+```java
+TextField input = new TextField();
+Label output = new Label();
+output.textProperty().bind(input.textProperty());
+
+VBox root = new VBox(8, input, output);
+```
+
+### Running work in the background
+
+```java
+Task<String> task = new Task<>() {
+    @Override
+    protected String call() throws Exception {
+        return loadData(); // slow I/O or computation
+    }
+};
+
+task.setOnSucceeded(event -> resultLabel.setText(task.getValue()));
+task.setOnFailed(event -> resultLabel.setText("Could not load data"));
+new Thread(task, "loader").start();
+```
+
+Here, `resultLabel` is updated on the JavaFX Application Thread by the task event handler. In production, prefer a managed executor and handle cancellation and exceptions explicitly.
+
+### Showing an alert
+
+```java
+Alert alert = new Alert(Alert.AlertType.INFORMATION);
+alert.setTitle("Saved");
+alert.setHeaderText(null);
+alert.setContentText("The file was saved successfully.");
+alert.showAndWait();
+```
+
+### Displaying a list
+
+```java
+ListView<String> list = new ListView<>();
+list.getItems().addAll("One", "Two", "Three");
+list.setOnMouseClicked(event ->
+    System.out.println(list.getSelectionModel().getSelectedItem())
+);
+```
+
+### Styling a control with CSS
+
+```java
+Button save = new Button("Save");
+save.getStyleClass().add("primary-button");
+scene.getStylesheets().add(
+    getClass().getResource("/app.css").toExternalForm()
+);
+```
+
+```css
+.primary-button {
+    -fx-background-color: #3478f6;
+    -fx-text-fill: white;
+}
+```
+
+### Switching scenes
+
+```java
+Button next = new Button("Next");
+next.setOnAction(event -> stage.setScene(new Scene(new Label("Second view"), 300, 180)));
+```
+
+### Using a checkbox and slider
+
+```java
+CheckBox enabled = new CheckBox("Enabled");
+Slider volume = new Slider(0, 100, 50);
+Label value = new Label();
+value.textProperty().bind(volume.valueProperty().asString("Volume: %.0f"));
+```
+
+### Playing a simple animation
+
+```java
+TranslateTransition animation = new TranslateTransition(Duration.seconds(1), button);
+animation.setByX(100);
+animation.setAutoReverse(true);
+animation.setCycleCount(Animation.INDEFINITE);
+animation.play();
+```
+
+The imports are `javafx.animation.*` and `javafx.util.Duration`.
+
+### Loading an image
+
+```java
+Image image = new Image(
+    Objects.requireNonNull(getClass().getResourceAsStream("/logo.png"))
+);
+ImageView imageView = new ImageView(image);
+imageView.setFitWidth(120);
+imageView.setPreserveRatio(true);
+```
+
+### A minimal FXML view
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.layout.StackPane?>
+
+<StackPane xmlns:fx="http://javafx.com/fxml" fx:controller="com.example.MainController">
+    <Button text="Hello" onAction="#sayHello" />
+</StackPane>
+```
+
+Load it from Java with:
+
+```java
+Parent root = FXMLLoader.load(getClass().getResource("/main.fxml"));
+```
+
+### A minimal table
+
+```java
+TableView<String> table = new TableView<>();
+TableColumn<String, String> column = new TableColumn<>("Items");
+column.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue()));
+table.getColumns().add(column);
+table.getItems().addAll("First", "Second");
+```
+
+### A menu bar
+
+```java
+MenuItem quit = new MenuItem("Quit");
+quit.setOnAction(event -> Platform.exit());
+
+Menu file = new Menu("File");
+file.getItems().add(quit);
+MenuBar menuBar = new MenuBar(file);
+```
+
+### Radio buttons
+
+```java
+ToggleGroup colors = new ToggleGroup();
+RadioButton red = new RadioButton("Red");
+RadioButton blue = new RadioButton("Blue");
+red.setToggleGroup(colors);
+blue.setToggleGroup(colors);
+```
+
+### A date picker
+
+```java
+DatePicker datePicker = new DatePicker();
+datePicker.setOnAction(event ->
+    System.out.println(datePicker.getValue())
+);
+```
+
+### Progress feedback
+
+```java
+ProgressBar progress = new ProgressBar();
+progress.progressProperty().bind(task.progressProperty());
+progress.visibleProperty().bind(task.runningProperty());
+```
+
+### Tabs
+
+```java
+TabPane tabs = new TabPane(
+    new Tab("Home", new Label("Home content")),
+    new Tab("Settings", new Label("Settings content"))
+);
+tabs.getTabs().forEach(tab -> tab.setClosable(false));
+```
+
+### Choosing a file
+
+```java
+FileChooser chooser = new FileChooser();
+chooser.setTitle("Open file");
+File selected = chooser.showOpenDialog(stage);
+if (selected != null) {
+    System.out.println(selected.getAbsolutePath());
+}
+```
+
 ## JavaFX modules
 
 Common modules include:
