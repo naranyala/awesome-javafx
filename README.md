@@ -262,6 +262,65 @@ Tauri is not a native widget toolkit. It is best compared with a Java applicatio
 - **`wgpu`, `vulkano`, `ash`, and `glium`:** graphics APIs, not general-purpose desktop widget systems.
 - **`bevy` and `macroquad`:** game/graphics engines that can host tool interfaces, but are not replacements for a business application toolkit.
 
+### C-based Rust libraries and Java counterparts
+
+Many Rust desktop applications use Rust crates that wrap, link to, or reimplement a library originally written in C or C++. The existence of a Rust crate does not mean Java cannot use the same underlying capability. Java can consume native libraries through JNI, JNA, the Foreign Function and Memory API (FFM), or a toolkit that already provides the binding. In other cases, Java has a standard-library or JVM-native equivalent and does not need the C library at all.
+
+The table below distinguishes **direct native equivalents**, **Java standard alternatives**, and **near-equivalents**. A Java package with the same name is not necessarily the same implementation, ABI, feature set, or license.
+
+| Rust crate or C-based dependency | What it commonly provides | Java equivalent or access path | Equivalence |
+|---|---|---|---|
+| `libc`, `nix`, `rustix` | POSIX/Linux system calls, files, processes, sockets, signals | `java.nio`, `java.net`, `java.lang.Process`, `java.io`, `java.util.concurrent`; FFM/JNA for missing calls | Often a standard Java alternative; direct syscall access is not equivalent |
+| `windows`, `windows-sys` | Win32, COM, DirectWrite, Direct2D, Windows Shell | AWT/Swing/SWT, `java.awt.Desktop`, JavaFX, JNA, JNI, or FFM | Java toolkit APIs cover common needs; native Windows coverage requires interop |
+| `objc2`, Cocoa/AppKit bindings | macOS Objective-C and AppKit APIs | AWT/Swing/JavaFX/SWT; JNI/JNA/FFM or a macOS binding for AppKit-specific features | Near-equivalent; Java does not provide the complete AppKit API |
+| `gtk4-rs`, `glib`, `gio`, `libadwaita` | GTK/GNOME widgets, main loop, D-Bus and desktop services | Java-GNOME/GTK bindings, SWT, JavaFX, or JNI/JNA/FFM | Direct binding availability and maintenance vary greatly |
+| `qt5/qt6` bindings | Qt widgets, model/view, networking, graphics | Qt Jambi | Closest direct toolkit equivalent, but Qt Jambi version support must be checked |
+| `winit`, `tao` | Cross-platform windows and event loops | AWT, Swing, JavaFX `Stage`, SWT `Display`, or LWJGL/GLFW bindings | Similar windowing role, different abstraction and lifecycle |
+| `sdl2`, `glfw` bindings | Windows, input, OpenGL/Vulkan contexts, audio | LWJGL, JOGL, JavaFX, SWT, or JNA/JNI bindings | Strong equivalent for games/tools, not a widget toolkit |
+| `wgpu` / native WebGPU, Vulkan, OpenGL, Metal, DirectX | GPU rendering and compute | LWJGL, JOGL, JavaFX rendering, Vulkan/OpenGL bindings, or FFM | Direct graphics access is available, but APIs remain low-level |
+| `skia-safe`, `tiny-skia`, Cairo, Pango, HarfBuzz | 2D drawing, text shaping, fonts | Java2D, JavaFX Canvas, Skija, JOGL/LWJGL, or native bindings | Java2D/JavaFX are alternatives; Skia/Pango behavior is not identical |
+| `webkit2gtk`, Wry, WebView2 bindings | Embedded web browser | JavaFX WebView, JCEF, SWT Browser, JxBrowser, or native FFM/JNI | Similar embedded-browser role; engine, licensing, and feature support differ |
+| `openssl`, `openssl-sys`, `boring`, `rustls` | TLS, X.509, cryptography | JSSE (`javax.net.ssl`/`java.security`), Conscrypt, Bouncy Castle, or native FFM/JNI | JSSE is the standard Java alternative; provider capabilities differ |
+| `curl`, `curl-sys` | HTTP, FTP, proxies, TLS, transfers | `java.net.http.HttpClient`, `URLConnection`, Apache HttpClient, OkHttp | Usually a high-level Java alternative; curl-specific protocol behavior may differ |
+| `reqwest`, `hyper`, `ureq` | Rust HTTP clients | Java `HttpClient`, OkHttp, Apache HttpClient, Jetty client | Direct product equivalent, but not the same async/runtime model |
+| `sqlite3` through `rusqlite` | Embedded SQL database | JDBC SQLite drivers such as Xerial SQLite JDBC; JNI/FFM to SQLite | Very close product capability; Java accesses it through JDBC |
+| `postgres`, `libpq` through Rust clients | PostgreSQL client protocol | PostgreSQL JDBC driver, R2DBC PostgreSQL | Direct database-client equivalent with a different API model |
+| `mysqlclient`, MariaDB C client | MySQL/MariaDB protocol | MySQL Connector/J, MariaDB Java Client | Direct database-client equivalent |
+| `libgit2` through `git2-rs` | Git repository operations | JGit; native libgit2 through JNA/JNI/FFM | JGit is a substantial Java implementation; behavior and performance differ |
+| `zlib`, `miniz`, `libbz2`, `xz` | Compression and decompression | `java.util.zip`, Apache Commons Compress, XZ for Java | Java has strong alternatives; algorithm and streaming coverage varies |
+| `zstd-sys`, `lz4_flex`, native LZ4/Zstandard | Fast compression | JNI bindings, `zstd-jni`, lz4-java, Apache Commons Compress | Near-equivalent; native Java bindings may use the same C implementation |
+| `image`, `png`, `jpeg`, `gif`, WebP native libraries | Image decoding/encoding | `javax.imageio.ImageIO`, TwelveMonkeys ImageIO, JavaFX images, native bindings | ImageIO covers common formats; modern/rare formats may need extensions |
+| `ffmpeg-next`, FFmpeg, GStreamer bindings | Audio/video codecs, demuxing, streaming | JavaCV/FFmpeg, vlcj, GStreamer Java bindings, JavaFX Media | Near-equivalent and highly platform/dependency dependent |
+| `alsa`, `pulseaudio`, `pipewire`, CoreAudio, WASAPI bindings | Audio devices and playback | Java Sound (`javax.sound.sampled`), JavaFX Media, native bindings | Java Sound covers basic audio; pro/low-latency features need native access |
+| `midir`, ALSA/CoreMIDI/WinMM bindings | MIDI devices | `javax.sound.midi`, native FFM/JNI | Java has a direct standard API for common MIDI operations |
+| `serialport`, `serialport-rs` | Serial ports | `javax.comm` descendants, jSerialComm, nrjavaserial, FFM/JNI | Third-party Java libraries are generally preferred |
+| `dbus`, zbus, `libdbus` | Linux desktop/service IPC | dbus-java, GDBus bindings, process/Socket APIs | Direct equivalent exists, but Linux packaging and service policy matter |
+| `notify-rust`, libnotify | Desktop notifications | `java.awt.SystemTray`, JavaFX/SWT integrations, D-Bus/JNA, OS-specific libraries | No complete cross-platform standard equivalent |
+| `libsecret`, Keychain, Credential Manager bindings | Secure credential storage | Java KeyStore, Windows DPAPI/JNA, macOS Keychain bindings, Secret Service bindings | Java KeyStore is not the same as the OS login keychain |
+| `fontconfig`, CoreText, DirectWrite, `font-kit` | Font discovery and metrics | `GraphicsEnvironment`, Java2D font APIs, JavaFX fonts, native FFM/JNI | Java abstracts common font use; native font management is platform-specific |
+| `libinput`, evdev, HIDAPI, Raw Input bindings | Low-level keyboard, mouse, touch, HID | AWT/SWT/JavaFX events, JInput, hid4java, JNA/FFM | Java GUI events are higher-level and intentionally hide device details |
+| `libusb`, `hidapi` | USB and HID device access | usb4java, hid4java, javax.usb implementations, FFM/JNI | Comparable through third-party libraries, not usually standard Java |
+| `rayon`, Tokio, async-std | Parallelism and asynchronous execution | Java threads, executors, `CompletableFuture`, virtual threads, reactive libraries | Similar outcomes; Rust ownership and Java GC/runtime scheduling differ |
+| `libloading` | Runtime loading of shared libraries | `System.load`, `System.loadLibrary`, JNA, FFM `Linker`/`SymbolLookup` | Direct capability equivalent, with different safety and symbol-resolution models |
+| `bindgen`, `cbindgen`, `cc`, `cmake`, `pkg-config` | Native binding/build generation | JNI headers, JNAerator, FFM declarations, Maven/Gradle native plugins, CMake/NMake integration | Build tooling equivalent is fragmented; no single Java standard workflow |
+
+#### How to interpret the table
+
+- **Standard Java alternative:** Java provides a managed API with a similar purpose, such as `HttpClient`, JSSE, Java Sound, JDBC, Java2D, or `java.util.zip`. It may use a different implementation and may intentionally hide operating-system details.
+- **Direct native access:** Java can call the same C library used by a Rust crate. This is useful when exact compatibility, a specialized feature, or an existing native deployment is required, but it introduces ABI, architecture, memory ownership, and packaging concerns.
+- **Third-party Java binding:** A Java library may wrap the same C/C++ project or provide a JVM-native implementation. Check release freshness, supported JDKs, native classifiers, licenses, and target platforms.
+- **Near-equivalent:** Both libraries solve the same product problem but differ in behavior, performance, threading, licensing, feature coverage, or programming model.
+
+#### FFI choices in Java
+
+1. **Prefer a standard Java API** when it meets the requirement. It is usually easier to package and maintain than a native dependency.
+2. **Use an established Java binding** when the ecosystem has one, such as JDBC, JGit, JavaCV, LWJGL, JNA, or a maintained GTK/Qt binding.
+3. **Use JNA** for relatively small and stable native calls where development speed matters more than minimum overhead.
+4. **Use JNI or generated bindings** for high-volume calls, callbacks, precise lifecycle control, or an existing native integration team.
+5. **Evaluate FFM** for modern Java native access where the supported JDK and API maturity are acceptable. It can avoid much JNI boilerplate, but it does not remove ABI or safety responsibility.
+
+Rust’s ownership and type system can make a wrapper around a C library safer to use, but the underlying C ABI remains a native boundary. Java’s managed runtime can make object integration convenient, but JNI/JNA/FFM calls still require careful handling of pointers, callbacks, threads, buffers, native resources, and crash behavior.
+
 ### Maturity comparison
 
 Java’s advantage is **breadth and historical stability**. Swing, AWT, SWT, JavaFX, packaging practices, accessibility APIs, desktop conventions, and third-party components have been exercised for many years. Even when a Java toolkit is not actively adding features, its behavior is predictable and documentation is abundant.
