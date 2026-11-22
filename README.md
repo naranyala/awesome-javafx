@@ -674,6 +674,183 @@ open.setOnAction(event -> {
 
 For large files, do the read in a background task. Consider encoding, file size, and whether the application should preserve unsaved changes.
 
+## Composing complex JavaFX interfaces
+
+Rich desktop interfaces are usually compositions of layout and interaction patterns. Build views from public JavaFX APIs, keep application state outside layout code, and treat hacks that depend on undocumented skin internals as upgrade risks.
+
+### Overlay content with `StackPane`
+
+A stack can layer loading, empty, or error states over content without rebuilding the view:
+
+```java
+var content = new TableView<Item>();
+var loading = new VBox(8, new ProgressIndicator(), new Label("Loading…"));
+loading.setAlignment(Pos.CENTER);
+var root = new StackPane(content, loading);
+content.disableProperty().bind(loading.visibleProperty());
+```
+
+This disables the table while loading. If the overlay should merely cover content, decide explicitly whether underlying controls remain interactive and accessible.
+
+### Master–detail layout
+
+Use `SplitPane` when both panes should remain visible; use explicit compact and wide views when the interaction should change on narrow windows. Avoid moving one `Node` between parents while it still belongs to another parent.
+
+```java
+var list = new ListView<String>();
+list.getItems().addAll("First", "Second");
+var detail = new Label("Select an item");
+list.getSelectionModel().selectedItemProperty().addListener((obs, old, value) ->
+    detail.setText(value == null ? "Select an item" : "Details: " + value));
+var split = new SplitPane(list, detail);
+split.setDividerPositions(0.3);
+var root = new BorderPane(split);
+stage.widthProperty().addListener((obs, old, width) -> {
+    if (width.doubleValue() < 520 && root.getCenter() == split) {
+        root.setCenter(list); // compact mode; provide a way to navigate back to details
+    } else if (width.doubleValue() >= 520 && root.getCenter() != split) {
+        root.setCenter(split);
+    }
+});
+```
+
+For production, preserve selection and navigation state when switching modes. Separate compact and wide view compositions are often clearer than moving nodes between parents.
+
+### Wizard flow with explicit state
+
+Keep the current step explicit, validate before advancing, and store form data independently of page nodes so it survives navigation.
+
+```java
+var pages = List.of(
+    new VBox(new Label("Step 1"), new TextField()),
+    new VBox(new Label("Step 2"), new CheckBox("Accept terms")),
+    new VBox(new Label("Review"))
+);
+var index = new SimpleIntegerProperty(0);
+var body = new StackPane();
+var back = new Button("Back");
+var next = new Button("Next");
+Runnable showPage = () -> body.getChildren().setAll(pages.get(index.get()));
+back.disableProperty().bind(index.isEqualTo(0));
+next.setOnAction(event -> {
+    if (index.get() < pages.size() - 1) index.set(index.get() + 1);
+});
+back.setOnAction(event -> {
+    if (index.get() > 0) index.set(index.get() - 1);
+});
+index.addListener((obs, old, value) -> showPage.run());
+showPage.run();
+var wizard = new BorderPane(body);
+wizard.setBottom(new HBox(8, back, next));
+```
+
+A complete wizard also needs validation, cancellation, accessible step announcements, and a final review/commit action.
+
+### Undo and redo with command history
+
+Represent edits as commands that know how to apply and reverse themselves. Keep history in the application/view-model layer, not in a control skin.
+
+```java
+interface Edit {
+    void apply();
+    void undo();
+}
+var undo = new ArrayDeque<Edit>();
+var redo = new ArrayDeque<Edit>();
+void execute(Edit edit) {
+    edit.apply();
+    undo.push(edit);
+    redo.clear();
+}
+void undo() {
+    if (!undo.isEmpty()) {
+        var edit = undo.pop();
+        edit.undo();
+        redo.push(edit);
+    }
+}
+```
+
+A real history should define merge behavior, memory limits, and what happens when saving or changing documents.
+
+### Drag and drop between lists
+
+Use the public dragboard API and validate the transfer mode and payload. This minimal example moves strings between two lists:
+
+```java
+void enableMove(ListView<String> source, ListView<String> target) {
+    source.setOnDragDetected(event -> {
+        var item = source.getSelectionModel().getSelectedItem();
+        if (item == null) return;
+        var drag = source.startDragAndDrop(TransferMode.MOVE);
+        var content = new ClipboardContent();
+        content.putString(item);
+        drag.setContent(content);
+        event.consume();
+    });
+    target.setOnDragOver(event -> {
+        if (event.getGestureSource() != target && event.getDragboard().hasString())
+            event.acceptTransferModes(TransferMode.MOVE);
+        event.consume();
+    });
+    target.setOnDragDropped(event -> {
+        var item = event.getDragboard().getString();
+        boolean success = item != null;
+        if (success) target.getItems().add(item);
+        event.setDropCompleted(success);
+        event.consume();
+    });
+}
+```
+
+For a complete move, remove the item from the source after a successful drop, handle duplicate items, and prefer stable IDs or typed serialized data over display strings.
+
+### Custom cells and virtualization
+
+Virtualized controls reuse cell instances. Always reset text, graphics, and listeners when a cell becomes empty or represents a different item.
+
+```java
+list.setCellFactory(view -> new ListCell<>() {
+    @Override protected void updateItem(String value, boolean empty) {
+        super.updateItem(value, empty);
+        setText(empty ? null : value);
+        setGraphic(null); // clear graphics from the previously displayed item
+    }
+});
+```
+
+Do not create a new permanent node or attach an unremoved listener on every `updateItem` call. For interactive custom cells, carefully manage event handlers and bindings as the cell is reused.
+
+### Zoomable canvas workspace
+
+For diagrams with many interactive objects, use scene-graph nodes when per-object picking and accessibility matter; use `Canvas` for large immediate-mode drawings. A `Group` transform provides a simple zoom foundation:
+
+```java
+var content = new Group(new Circle(80, 70, 24, Color.CORNFLOWERBLUE));
+var scale = new Scale(1, 1, 0, 0);
+content.getTransforms().add(scale);
+var viewport = new Pane(content);
+viewport.setOnScroll(event -> {
+    double factor = event.getDeltaY() > 0 ? 1.1 : 1 / 1.1;
+    scale.setX(Math.clamp(scale.getX() * factor, 0.25, 4.0));
+    scale.setY(scale.getX());
+});
+```
+
+This is a minimal zoom demonstration, not a complete editor: production workspaces need cursor-centered zoom, panning, hit-testing, selection, coordinate transforms, and bounds management. `Math.clamp` requires Java 21+.
+
+### Docking and saved workspaces
+
+Start with `TabPane`, `SplitPane`, and nested layout panes if the workspace is simple. For detachable/dockable panels, evaluate a maintained docking library before implementing drag regions, floating windows, persistence, focus restoration, and accessibility from scratch. Persist stable panel identifiers and layout data—not serialized JavaFX nodes—and validate saved layouts when the application version changes.
+
+### Lifecycle-safe view composition
+
+Views that install listeners, start animations, or launch tasks need an explicit cleanup path when no longer used. Keep listener references or use bindings with clear ownership; stop animations and cancel obsolete work. Prefer a small `AutoCloseable` view model/resource scope when a view owns several subscriptions.
+
+### Prefer public APIs to scene-graph hacks
+
+Avoid reflection into private controls, undocumented CSS selectors tied to skin structure, and assumptions about a control's internal child nodes. These can break between JavaFX versions and themes. Prefer public properties and events, documented CSS, custom `Control`/`Skin` implementations when a genuinely reusable control is needed, or composition of ordinary nodes. Use `lookup()` for occasional diagnostics or dynamic content—not as the normal way to manage application state.
+
 ## Properties, bindings, and observable collections
 
 JavaFX properties are one of its defining features:
