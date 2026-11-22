@@ -9,17 +9,30 @@ JavaFX is a Java-based desktop toolkit for building rich cross-platform applicat
 - [Why JavaFX?](#why-javafx)
 - [Status and maturity](#status-and-maturity)
 - [Core mental model](#core-mental-model)
-- [Minimal implementation examples](#minimal-implementation-examples)
+- [Getting started: project setup](#getting-started-project-setup)
 - [JavaFX modules](#javafx-modules)
+- [Minimal implementation examples](#minimal-implementation-examples)
 - [Controls and layout](#controls-and-layout)
+- [Composing complex JavaFX interfaces](#composing-complex-javafx-interfaces)
 - [Properties, bindings, and observable collections](#properties-bindings-and-observable-collections)
 - [FXML and controllers](#fxml-and-controllers)
 - [CSS and theming](#css-and-theming)
 - [Concurrency and background work](#concurrency-and-background-work)
-- [Packaging and deployment](#packaging-and-deployment)
+- [Tables, trees, and large data](#tables-trees-and-large-data)
+- [Graphics, animation, charts, and media](#graphics-animation-charts-and-media)
+- [WebView](#webview)
+- [Swing and SWT interoperability](#swing-and-swt-interoperability)
+- [Native integration and FFI](#native-integration-and-ffi)
+- [Modern Java and experimental JavaFX](#modern-java-and-experimental-javafx)
+- [Recommended project structure](#recommended-project-structure)
 - [Testing and diagnostics](#testing-and-diagnostics)
-- [Ecosystem and library ideas](#ecosystem)
+- [Packaging and deployment](#packaging-and-deployment)
+- [Ecosystem](#ecosystem)
+- [Potential ideas for a reusable JavaFX library](#potential-ideas-for-a-reusable-javafx-library)
+- [Legacy JavaFX patterns and modern alternatives](#legacy-javafx-patterns-and-modern-alternatives)
+- [Strengths and limitations](#strengths-and-limitations)
 - [Practical checklist](#practical-checklist)
+- [When JavaFX is not the right fit](#when-javafx-is-not-the-right-fit)
 
 ## Why JavaFX?
 
@@ -65,6 +78,63 @@ Application
 - `ObservableValue`, `Property`, and `Binding` connect state to the scene graph.
 
 JavaFX UI objects must be accessed on the **JavaFX Application Thread**. Long-running work must run elsewhere and publish results back to that thread.
+
+## Getting started: project setup
+
+JavaFX is delivered separately from the JDK. Use a build tool to resolve platform-specific JavaFX artifacts rather than copying SDK jars into a project manually. Pin compatible JDK, OpenJFX, and plugin versions in the build, and verify the combination on each target OS and CPU architecture.
+
+### Gradle (Groovy DSL)
+
+A minimal `build.gradle` using the OpenJFX Gradle plugin:
+
+```groovy
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    // Add libraries used by the application here.
+}
+
+javafx {
+    version = '21.0.2'
+    modules = [ 'javafx.controls' ]
+}
+
+application {
+    mainClass = 'com.example.app/com.example.app.HelloApp'
+}
+```
+
+Use versions appropriate to your project; this is an illustrative configuration, not a claim that these are the latest releases. Run with `./gradlew run` after creating the Gradle wrapper. Include `javafx.fxml` when using FXML and declare other modules only when needed.
+
+A modular project should include `module-info.java` with the modules it uses and the package containing the application entry point exported or opened as required. For FXML reflection, `opens com.example.app to javafx.fxml;` is commonly needed for controller packages.
+
+### Maven
+
+For Maven, use the OpenJFX Maven plugin and declare the JavaFX modules as dependencies. OpenJFX artifacts are platform-aware; follow the plugin's current documentation for the target platform and module configuration. Typical launch command: `mvn clean javafx:run`.
+
+Keep build instructions synchronized with the actual project and plugin versions. Avoid presenting copied commands as universal: platform classifiers, module paths, and native packaging differ by JDK, OS, and architecture.
+
+## JavaFX modules
+
+Common modules include:
+
+| Module | Purpose |
+|---|---|
+| `javafx.base` | Properties, bindings, collections, events, and foundational APIs |
+| `javafx.graphics` | `Application`, `Stage`, `Scene`, nodes, layout, rendering, animation, input, and windows |
+| `javafx.controls` | Buttons, fields, tables, trees, lists, menus, dialogs, charts, and skins |
+| `javafx.fxml` | FXML loading and controller integration |
+| `javafx.media` | Audio and video playback |
+| `javafx.web` | WebView and embedded web content |
+| `javafx.swing` | Swing interoperability through `JFXPanel` and `SwingNode` |
+| `javafx.swt` | SWT interoperability where supplied by the distribution |
+
+Use only the modules needed by the application when creating a custom runtime with `jlink`.
 
 ## Minimal implementation examples
 
@@ -299,63 +369,6 @@ if (selected != null) {
     System.out.println(selected.getAbsolutePath());
 }
 ```
-
-## Getting started: project setup
-
-JavaFX is delivered separately from the JDK. Use a build tool to resolve platform-specific JavaFX artifacts rather than copying SDK jars into a project manually. Pin compatible JDK, OpenJFX, and plugin versions in the build, and verify the combination on each target OS and CPU architecture.
-
-### Gradle (Groovy DSL)
-
-A minimal `build.gradle` using the OpenJFX Gradle plugin:
-
-```groovy
-plugins {
-    id 'application'
-    id 'org.openjfx.javafxplugin' version '0.1.0'
-}
-
-repositories { mavenCentral() }
-
-dependencies {
-    // Add libraries used by the application here.
-}
-
-javafx {
-    version = '21.0.2'
-    modules = [ 'javafx.controls' ]
-}
-
-application {
-    mainClass = 'com.example.app/com.example.app.HelloApp'
-}
-```
-
-Use versions appropriate to your project; this is an illustrative configuration, not a claim that these are the latest releases. Run with `./gradlew run` after creating the Gradle wrapper. Include `javafx.fxml` when using FXML and declare other modules only when needed.
-
-A modular project should include `module-info.java` with the modules it uses and the package containing the application entry point exported or opened as required. For FXML reflection, `opens com.example.app to javafx.fxml;` is commonly needed for controller packages.
-
-### Maven
-
-For Maven, use the OpenJFX Maven plugin and declare the JavaFX modules as dependencies. OpenJFX artifacts are platform-aware; follow the plugin's current documentation for the target platform and module configuration. Typical launch command: `mvn clean javafx:run`.
-
-Keep build instructions synchronized with the actual project and plugin versions. Avoid presenting copied commands as universal: platform classifiers, module paths, and native packaging differ by JDK, OS, and architecture.
-
-## JavaFX modules
-
-Common modules include:
-
-| Module | Purpose |
-|---|---|
-| `javafx.base` | Properties, bindings, collections, events, and foundational APIs |
-| `javafx.graphics` | `Application`, `Stage`, `Scene`, nodes, layout, rendering, animation, input, and windows |
-| `javafx.controls` | Buttons, fields, tables, trees, lists, menus, dialogs, charts, and skins |
-| `javafx.fxml` | FXML loading and controller integration |
-| `javafx.media` | Audio and video playback |
-| `javafx.web` | WebView and embedded web content |
-| `javafx.swing` | Swing interoperability through `JFXPanel` and `SwingNode` |
-| `javafx.swt` | SWT interoperability where supplied by the distribution |
-
-Use only the modules needed by the application when creating a custom runtime with `jlink`.
 
 ## Controls and layout
 
@@ -1053,40 +1066,6 @@ Configure an executor for the service as appropriate, and call `shutdown()` on a
 
 `CompletableFuture`, virtual threads, reactive libraries, and structured concurrency can be used, but their completion callbacks must be marshalled back to the JavaFX thread before touching UI state.
 
-## Modern Java and experimental JavaFX
-
-JavaFX is a useful playground for modern Java—not just a way to place controls on a window. Keep experiments in small, reversible slices, measure before optimizing, and distinguish stable Java SE features from preview or incubator APIs. Preview features require explicit compiler/runtime flags and can change between JDK releases; do not make them a production dependency without a deliberate upgrade plan.
-
-### Language and API experiments
-
-- **Records** make concise immutable view models and table-row values. Keep mutable JavaFX properties in presentation models when binding/editing is required; records are not observable by themselves.
-- **Sealed types and pattern matching** can model navigation commands, dialog results, and domain outcomes as closed sets. Convert them to UI state at the presentation boundary.
-- **`var`, switch expressions, and text blocks** can reduce ceremony in controllers, test fixtures, and SQL/JSON templates. Prefer explicit types where JavaFX generic inference or event-handler types would otherwise be unclear.
-- **Virtual threads** (JDK 21+) can simplify blocking I/O workflows. They do not make CPU-bound work faster, remove cancellation requirements, or permit touching controls off the FX thread. Bound resource-heavy operations and marshal results to the UI thread.
-- **Structured concurrency and scoped values** are evolving across JDK releases. Check their status in the exact JDK you target; APIs may be preview/incubator and should be isolated behind application-owned abstractions.
-- **Foreign Function & Memory API** (final in JDK 22) enables safer native interop than JNI for many use cases, but native ABI, lifetime, threading, and platform packaging remain your responsibility.
-
-### UI experiments worth building
-
-Try a command palette, keyboard-first navigation, live theme editor, CSS inspector, drag-and-drop workflow canvas, node-graph editor, timeline, data explorer, or a custom control with a documented skin. Use `Canvas` for immediate-mode drawing and `Node`/`Shape` for scene-graph interaction; benchmark the choice with realistic workloads.
-
-For high-throughput views, experiment with virtualized controls, paging, incremental loading, immutable snapshots, and batched observable-list updates. Avoid rebuilding the entire scene graph on every event. Profile pulse/layout/render behavior and memory use before introducing custom rendering or caches.
-
-### Data, AI, and live systems
-
-JavaFX can host dashboards and interactive clients for local models, remote AI services, telemetry, simulations, and streaming data. Keep network/model work in services, expose progress and cancellation, debounce expensive searches, and avoid placing secrets in the client. Treat streamed output as untrusted input, and use bounded queues or coalescing so producers cannot overwhelm the UI event thread.
-
-### A safe experimentation loop
-
-1. State the user-visible hypothesis and define a measurable success criterion.
-2. Build a small vertical slice using public JavaFX APIs.
-3. Test keyboard, accessibility, resizing, HiDPI, and target operating systems early.
-4. Measure startup, responsiveness, memory, and rendering with representative data.
-5. Check licensing, maintenance, security, and runtime packaging before adopting dependencies.
-6. Record JDK/OpenJFX versions and flags, especially for preview APIs, and keep a fallback path.
-
-Experimental interfaces still need focus handling, accessible names, predictable cancellation, and recoverable errors. Novelty is not a substitute for usability or maintainability.
-
 ## Tables, trees, and large data
 
 Tables and trees are common performance hotspots.
@@ -1182,85 +1161,59 @@ Then distribute a platform-specific shared library and declare the ABI through F
 
 For larger integrations, consider a command/service boundary or a generated protocol instead of embedding native code in the UI process. A process boundary can contain crashes and simplify upgrades, at the cost of IPC latency and deployment complexity.
 
-## C/C++ libraries relevant to desktop GUI applications
+## Modern Java and experimental JavaFX
 
-JavaFX is often sufficient for the UI, while a C or C++ library supplies a specialized native capability. The library may be used directly through FFI, through an existing Java binding, or behind a small native helper process.
+JavaFX is a useful playground for modern Java—not just a way to place controls on a window. Keep experiments in small, reversible slices, measure before optimizing, and distinguish stable Java SE features from preview or incubator APIs. Preview features require explicit compiler/runtime flags and can change between JDK releases; do not make them a production dependency without a deliberate upgrade plan.
 
-| Library/ecosystem | Language | Desktop use | JavaFX integration path |
-|---|---|---|---|
-| **Qt / Qt Widgets / Qt Quick** | C++ | Full widget toolkit, model/view, graphics, networking, multimedia, and desktop utilities | Qt Jambi for Java Qt applications; otherwise keep Qt as a separate UI or expose selected services through JNI/FFM. Mixing a Qt event loop directly into JavaFX is complex. |
-| **GTK 3/4** | C | Native Linux/GNOME widgets, dialogs, accessibility, and desktop integration | GTK Java bindings, SWT, or native FFI. Use JavaFX for the main UI unless native GTK behavior is a requirement. |
-| **libadwaita** | C | GNOME design system and adaptive GTK controls | GTK bindings or a native helper; target Linux/GNOME explicitly. |
-| **wxWidgets** | C++ | Cross-platform native-looking widgets | wxWidgets Java bindings are uncommon and maintenance varies; use JNI/FFM only when its native behavior is essential. |
-| **FLTK** | C++ | Small, portable traditional widget toolkit | FLTK Java bindings or JNA/JNI/FFM; usually choose JavaFX instead for a Java-first application. |
-| **JUCE** | C++ | Audio tools, plugins, media applications, custom controls, and cross-platform windows | JavaFX can host the application shell while JUCE runs as a native component/service, but view embedding and licensing require careful review. |
-| **Dear ImGui** | C++ | Immediate-mode tools, editors, debug panels, and graphics utilities | Java bindings exist; integrate through LWJGL/JavaCPP or a native surface. It is not a replacement for JavaFX’s accessible business controls. |
-| **Nuklear** | C | Small immediate-mode GUI | Native binding or generated FFI; useful for specialized tools, not a general JavaFX control replacement. |
-| **SDL2 / SDL3** | C | Windows, input, audio, game controllers, OpenGL/Vulkan/Metal contexts | LWJGL, JavaCPP, JNA/JNI/FFM, or a separate native rendering surface. SDL is not a widget toolkit. |
-| **GLFW** | C | Windows, input, and graphics contexts | LWJGL or native FFI. Combine with OpenGL/Vulkan/wgpu-style rendering rather than JavaFX controls. |
-| **raylib** | C | Lightweight graphics, games, simulations, and interactive tools | Java bindings or native FFI; use a separate rendering window or embed only with platform-specific work. |
-| **Skia** | C++ | 2D rendering, text, images, and GPU-backed drawing | Skija, JavaCPP, LWJGL, or JNI/FFM. Useful for custom JavaFX-adjacent rendering, but it does not provide JavaFX controls. |
-| **Cairo / Pango / HarfBuzz** | C | 2D drawing, text layout, shaping, and font processing | Java2D/JavaFX cover common needs; use JavaCPP/JNA/JNI/FFM for exact native behavior. |
-| **OpenGL / Vulkan / DirectX / Metal** | C APIs / C++ ecosystems | GPU rendering and compute | LWJGL, JOGL, JavaCPP, or FFM. Keep rendering isolated from ordinary JavaFX controls and benchmark synchronization costs. |
-| **WebView2 / WebKitGTK / Chromium / CEF** | C/C++ APIs | Embedded browser engines and web content | JavaFX WebView, JCEF, JxBrowser, SWT Browser, or native FFI. Engine version, sandboxing, licensing, and bundle size matter. |
-| **FFmpeg / GStreamer** | C | Audio/video codecs, demuxing, capture, streaming, and transcoding | JavaCV, vlcj, GStreamer Java bindings, JavaCPP, or JNI/FFM. Prefer JavaFX Media only when its supported formats and controls are sufficient. |
-| **OpenAL / PortAudio / RtAudio** | C/C++ | Low-level and cross-platform audio | Java Sound or JavaFX Media for ordinary playback; LWJGL/JavaCPP/native bindings for low latency or device control. |
-| **libusb / HIDAPI** | C | USB, HID, controllers, scanners, and custom hardware | usb4java, hid4java, JavaCPP, or JNI/FFM; isolate device I/O from the JavaFX thread. |
-| **SQLite / PostgreSQL libpq / MySQL client** | C | Embedded or native database access | Prefer JDBC drivers; use native bindings only for a specific extension, performance requirement, or existing native component. |
-| **OpenSSL / mbedTLS / libsodium** | C | TLS, cryptography, certificates, and secure primitives | Prefer JSSE, Bouncy Castle, or a maintained Java provider; use native FFI only when compliance or a required primitive demands it. |
+### Language and API experiments
 
-### Choosing how to use a C/C++ GUI library
+- **Records** make concise immutable view models and table-row values. Keep mutable JavaFX properties in presentation models when binding/editing is required; records are not observable by themselves.
+- **Sealed types and pattern matching** can model navigation commands, dialog results, and domain outcomes as closed sets. Convert them to UI state at the presentation boundary.
+- **`var`, switch expressions, and text blocks** can reduce ceremony in controllers, test fixtures, and SQL/JSON templates. Prefer explicit types where JavaFX generic inference or event-handler types would otherwise be unclear.
+- **Virtual threads** (JDK 21+) can simplify blocking I/O workflows. They do not make CPU-bound work faster, remove cancellation requirements, or permit touching controls off the FX thread. Bound resource-heavy operations and marshal results to the UI thread.
+- **Structured concurrency and scoped values** are evolving across JDK releases. Check their status in the exact JDK you target; APIs may be preview/incubator and should be isolated behind application-owned abstractions.
+- **Foreign Function & Memory API** (final in JDK 22) enables safer native interop than JNI for many use cases, but native ABI, lifetime, threading, and platform packaging remain your responsibility.
 
-- **Use a Java binding** when it is maintained, supports the target JDK and platforms, and provides the required widget or native API.
-- **Use JavaFX plus native services** when JavaFX should own the UI and the C/C++ library only provides codecs, hardware, rendering, or computation.
-- **Use a native child process** when crash containment, an existing C++ application, or incompatible event loops make in-process FFI risky.
-- **Use a custom JavaFX `Node` or `Canvas` bridge** only when input, focus, resizing, GPU context ownership, and accessibility are fully defined.
-- **Avoid mixing event loops casually:** Qt, GTK, SDL, JUCE, WebKit, and JavaFX each have lifecycle and thread-affinity rules.
-- **Check licenses and redistribution:** Qt, JUCE, Chromium/CEF, FFmpeg, codecs, GPU drivers, and platform SDKs can impose materially different obligations.
+### UI experiments worth building
 
-A C/C++ library is not automatically a JavaFX competitor. Qt, GTK, wxWidgets, FLTK, and JUCE are GUI platforms; SDL, GLFW, Skia, Cairo, OpenGL, Vulkan, FFmpeg, and libusb are supporting technologies. JavaFX can replace the widget layer while using the latter group behind carefully designed Java services.
+Try a command palette, keyboard-first navigation, live theme editor, CSS inspector, drag-and-drop workflow canvas, node-graph editor, timeline, data explorer, or a custom control with a documented skin. Use `Canvas` for immediate-mode drawing and `Node`/`Shape` for scene-graph interaction; benchmark the choice with realistic workloads.
 
-## Packaging and deployment
+For high-throughput views, experiment with virtualized controls, paging, incremental loading, immutable snapshots, and batched observable-list updates. Avoid rebuilding the entire scene graph on every event. Profile pulse/layout/render behavior and memory use before introducing custom rendering or caches.
 
-JavaFX is a runtime dependency and must be included in the delivered application.
+### Data, AI, and live systems
 
-### Recommended build flow
+JavaFX can host dashboards and interactive clients for local models, remote AI services, telemetry, simulations, and streaming data. Keep network/model work in services, expose progress and cancellation, debounce expensive searches, and avoid placing secrets in the client. Treat streamed output as untrusted input, and use bounded queues or coalescing so producers cannot overwhelm the UI event thread.
 
-1. Pin a supported JDK and JavaFX version.
-2. Declare JavaFX modules with Maven or Gradle.
-3. Run tests on every target operating system and architecture.
-4. Build a runtime image with `jlink` when a reduced runtime is useful.
-5. Create installers with `jpackage` or a maintained packaging tool.
-6. Sign binaries and installers; notarize macOS applications.
-7. Test the installed application, not only the IDE run configuration.
-8. Provide crash reporting, logging, update, rollback, and uninstall behavior.
+### A safe experimentation loop
 
-A typical Maven dependency pattern is:
+1. State the user-visible hypothesis and define a measurable success criterion.
+2. Build a small vertical slice using public JavaFX APIs.
+3. Test keyboard, accessibility, resizing, HiDPI, and target operating systems early.
+4. Measure startup, responsiveness, memory, and rendering with representative data.
+5. Check licensing, maintenance, security, and runtime packaging before adopting dependencies.
+6. Record JDK/OpenJFX versions and flags, especially for preview APIs, and keep a fallback path.
 
-```xml
-<properties>
-    <javafx.version>YOUR_JAVAFX_VERSION</javafx.version>
-</properties>
+Experimental interfaces still need focus handling, accessible names, predictable cancellation, and recoverable errors. Novelty is not a substitute for usability or maintainability.
 
-<dependency>
-    <groupId>org.openjfx</groupId>
-    <artifactId>javafx-controls</artifactId>
-    <version>${javafx.version}</version>
-</dependency>
+## Recommended project structure
+
+```text
+src/main/java/com/example/app/
+  App.java                 # Application lifecycle
+  ui/                      # FXML/controllers or programmatic views
+  viewmodel/               # JavaFX-facing observable state
+  domain/                  # Toolkit-independent business model
+  service/                 # I/O, database, HTTP, and background work
+  platform/                # OS and FFI adapters
+src/main/resources/
+  com/example/app/
+    views/
+    styles/
+    images/
+    i18n/
 ```
 
-Add `javafx-fxml`, `javafx-web`, `javafx-media`, or other modules only when needed. Maven and Gradle plugins can select platform-specific artifacts; keep the exact plugin configuration aligned with the selected JDK and JavaFX release.
-
-### JPMS and runtime images
-
-Modules are optional for JavaFX projects but useful for strong encapsulation and smaller runtime images. A modular application typically needs:
-
-- `requires javafx.controls;`
-- `requires javafx.fxml;` when using FXML;
-- `opens package.name to javafx.fxml;` for reflective controller and field access;
-- `exports` only for packages that form a public module API.
-
-Use `jdeps`, `jlink`, and `jpackage` as part of release automation. Verify reflection, FXML resources, service loading, fonts, native libraries, and WebView/media modules in the final image.
+Keep `domain` independent of JavaFX where practical. Put JavaFX properties and bindings in view models, and keep platform-specific code behind interfaces.
 
 ## Testing and diagnostics
 
@@ -1336,25 +1289,47 @@ Keep most application logic testable without starting JavaFX. Then add focused U
 
 Use Java Flight Recorder, VisualVM, async-profiler, and OS-level profilers to investigate startup, memory, blocked threads, rendering, and native calls. Do not infer JavaFX performance from a debug build or an empty scene.
 
-## Recommended project structure
+## Packaging and deployment
 
-```text
-src/main/java/com/example/app/
-  App.java                 # Application lifecycle
-  ui/                      # FXML/controllers or programmatic views
-  viewmodel/               # JavaFX-facing observable state
-  domain/                  # Toolkit-independent business model
-  service/                 # I/O, database, HTTP, and background work
-  platform/                # OS and FFI adapters
-src/main/resources/
-  com/example/app/
-    views/
-    styles/
-    images/
-    i18n/
+JavaFX is a runtime dependency and must be included in the delivered application.
+
+### Recommended build flow
+
+1. Pin a supported JDK and JavaFX version.
+2. Declare JavaFX modules with Maven or Gradle.
+3. Run tests on every target operating system and architecture.
+4. Build a runtime image with `jlink` when a reduced runtime is useful.
+5. Create installers with `jpackage` or a maintained packaging tool.
+6. Sign binaries and installers; notarize macOS applications.
+7. Test the installed application, not only the IDE run configuration.
+8. Provide crash reporting, logging, update, rollback, and uninstall behavior.
+
+A typical Maven dependency pattern is:
+
+```xml
+<properties>
+    <javafx.version>YOUR_JAVAFX_VERSION</javafx.version>
+</properties>
+
+<dependency>
+    <groupId>org.openjfx</groupId>
+    <artifactId>javafx-controls</artifactId>
+    <version>${javafx.version}</version>
+</dependency>
 ```
 
-Keep `domain` independent of JavaFX where practical. Put JavaFX properties and bindings in view models, and keep platform-specific code behind interfaces.
+Add `javafx-fxml`, `javafx-web`, `javafx-media`, or other modules only when needed. Maven and Gradle plugins can select platform-specific artifacts; keep the exact plugin configuration aligned with the selected JDK and JavaFX release.
+
+### JPMS and runtime images
+
+Modules are optional for JavaFX projects but useful for strong encapsulation and smaller runtime images. A modular application typically needs:
+
+- `requires javafx.controls;`
+- `requires javafx.fxml;` when using FXML;
+- `opens package.name to javafx.fxml;` for reflective controller and field access;
+- `exports` only for packages that form a public module API.
+
+Use `jdeps`, `jlink`, and `jpackage` as part of release automation. Verify reflection, FXML resources, service loading, fonts, native libraries, and WebView/media modules in the final image.
 
 ## Ecosystem
 
@@ -1522,26 +1497,6 @@ your-library-test       # Testing utilities
 
 Keep `core` independent of JavaFX where practical. Make JavaFX, charts, native integrations, and testing support optional modules so applications can depend only on the capabilities they need.
 
-## Strengths and limitations
-
-### Strengths
-
-- coherent scene graph, controls, styling, animation, charts, media, and WebView;
-- strong property/binding model for state-driven desktop interfaces;
-- Java tooling, libraries, profiling, and enterprise integration;
-- cross-platform rendering without requiring a full browser for native screens;
-- practical packaging through custom runtimes and native installers;
-- suitable for forms, dashboards, editors, internal tools, and rich client software.
-
-### Limitations
-
-- JavaFX is distributed separately from the JDK;
-- the third-party ecosystem is smaller than web, Swing, or Android ecosystems;
-- native controls and platform conventions are not identical across operating systems;
-- accessibility, IME, printing, WebView, and media behavior still require target-platform testing;
-- large tables, embedded browsers, and custom rendering need profiling;
-- deployment must include compatible JavaFX modules and, where applicable, native libraries.
-
 ## Legacy JavaFX patterns and modern alternatives
 
 “Old” does not mean unusable: JavaFX APIs remain supported across many styles. The comparisons below identify patterns that often become fragile as an application grows, and show alternatives that improve clarity, lifecycle management, or portability. Choose based on the problem, not fashion.
@@ -1706,6 +1661,26 @@ items.setAll(replacement);
 Perform loading off-thread, then apply the collection change on the FX thread. For very large data, use paging or incremental loading; batching alone does not make an unbounded dataset cheap.
 
 The modern approach is not “replace every listener,” “use FXML everywhere,” or “use the newest JDK feature.” Keep code simple, use public APIs, make lifecycle and thread ownership explicit, and test the actual target platforms.
+
+## Strengths and limitations
+
+### Strengths
+
+- coherent scene graph, controls, styling, animation, charts, media, and WebView;
+- strong property/binding model for state-driven desktop interfaces;
+- Java tooling, libraries, profiling, and enterprise integration;
+- cross-platform rendering without requiring a full browser for native screens;
+- practical packaging through custom runtimes and native installers;
+- suitable for forms, dashboards, editors, internal tools, and rich client software.
+
+### Limitations
+
+- JavaFX is distributed separately from the JDK;
+- the third-party ecosystem is smaller than web, Swing, or Android ecosystems;
+- native controls and platform conventions are not identical across operating systems;
+- accessibility, IME, printing, WebView, and media behavior still require target-platform testing;
+- large tables, embedded browsers, and custom rendering need profiling;
+- deployment must include compatible JavaFX modules and, where applicable, native libraries.
 
 ## Practical checklist
 
