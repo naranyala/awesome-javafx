@@ -1365,6 +1365,171 @@ Keep `core` independent of JavaFX where practical. Make JavaFX, charts, native i
 - large tables, embedded browsers, and custom rendering need profiling;
 - deployment must include compatible JavaFX modules and, where applicable, native libraries.
 
+## Legacy JavaFX patterns and modern alternatives
+
+“Old” does not mean unusable: JavaFX APIs remain supported across many styles. The comparisons below identify patterns that often become fragile as an application grows, and show alternatives that improve clarity, lifecycle management, or portability. Choose based on the problem, not fashion.
+
+### 1. Blocking the Application Thread → asynchronous work
+
+**Fragile:** doing slow work in an event handler freezes input, animation, and repainting.
+
+```java
+button.setOnAction(event -> {
+    var result = service.load(); // blocks the FX thread
+    output.setText(result);
+});
+```
+
+**Prefer:** run blocking work in a `Task`; its completion handlers run on the FX thread.
+
+```java
+var task = new Task<String>() {
+    @Override protected String call() throws Exception {
+        return service.load();
+    }
+};
+task.setOnSucceeded(event -> output.setText(task.getValue()));
+task.setOnFailed(event -> showError(task.getException()));
+executor.execute(task);
+```
+
+Use a managed executor, support cancellation where useful, and shut it down during application shutdown. Never update controls from `Task.call()`.
+
+### 2. Fixed coordinates → layout containers
+
+**Fragile:** absolute positioning breaks with resizing, font scaling, localization, and different DPI.
+
+```java
+button.setLayoutX(120);
+button.setLayoutY(80);
+```
+
+**Prefer:** describe relationships with layout panes and spacing.
+
+```java
+var root = new BorderPane();
+root.setTop(new ToolBar(new Button("Open"), new Button("Save")));
+root.setCenter(new TextArea());
+root.setBottom(new Label("Ready"));
+stage.setScene(new Scene(root, 640, 400));
+```
+
+Use `Canvas` or explicit coordinates when drawing is genuinely the task, not as a substitute for application layout.
+
+### 3. Repeated listener bookkeeping → bindings where appropriate
+
+**Fragile:** manually mirror state in listeners, then forget to remove listeners when views are discarded.
+
+```java
+name.textProperty().addListener((obs, old, value) ->
+    greeting.setText("Hello, " + value));
+```
+
+**Prefer for direct derived text:**
+
+```java
+greeting.textProperty().bind(Bindings.concat("Hello, ", name.textProperty()));
+```
+
+Bindings reduce synchronization code, but they do not replace listeners for side effects. Unbind properties and remove listeners when their ownership/lifecycle ends.
+
+### 4. One giant controller → views, view models, and services
+
+**Fragile:** a controller that builds the whole UI, performs I/O, validates data, and owns application state is difficult to test and change.
+
+**Prefer:** keep view event handlers thin and delegate work to named services or view models. For example, a controller can call `repository.save(model)` and render success/failure, while the repository and validation logic remain ordinary Java classes that can be tested without starting JavaFX.
+
+```java
+saveButton.setOnAction(event -> viewModel.save());
+status.textProperty().bind(viewModel.statusProperty());
+```
+
+Do not introduce an elaborate framework for a small screen; separate responsibilities when there is a real testing or maintenance benefit.
+
+### 5. Manually copied SDK jars → reproducible builds
+
+**Fragile:** developers keep different local JavaFX SDKs or hard-code machine-specific module paths.
+
+**Prefer:** declare JDK, JavaFX modules, and plugins in Gradle/Maven; commit the wrapper and lock/version policy; test builds on target platforms. Use `jlink`/`jpackage` for deployment where appropriate. A successful IDE launch is not proof that the packaged application contains the required JavaFX native libraries.
+
+### 6. Assuming JavaFX properties are domain models → explicit UI boundary
+
+**Fragile:** coupling persistence and business logic to JavaFX properties makes non-UI testing and reuse harder.
+
+**Prefer:** use plain Java domain values (records are often suitable) and adapt them to observable UI state where editing or binding is needed. Use JavaFX properties in the view model when their observable behavior is valuable; avoid duplicate sources of truth.
+
+### 7. Searching the scene graph repeatedly → keep typed references
+
+**Fragile:** looking up controls by selector strings throughout application logic makes refactoring difficult and can fail at runtime.
+
+```java
+var save = (Button) scene.lookup("#saveButton");
+save.setDisable(true);
+```
+
+**Prefer:** retain a typed reference in programmatic views, or inject an `@FXML` field in a controller. Use `lookup` for occasional diagnostics or genuinely dynamic content, not as routine state access.
+
+### 8. Inline styling everywhere → semantic CSS classes
+
+**Fragile:** inline style strings duplicate styling and mix presentation with behavior.
+
+```java
+button.setStyle("-fx-background-color: blue; -fx-text-fill: white;");
+```
+
+**Prefer:** assign a semantic class and define its states in a stylesheet.
+
+```java
+button.getStyleClass().add("primary-action");
+```
+
+```css
+.primary-action { -fx-background-color: #2563eb; -fx-text-fill: white; }
+.primary-action:focused { -fx-effect: dropshadow(gaussian, #2563eb88, 6, 0, 0, 0); }
+```
+
+### 9. Starting unmanaged threads → own an executor
+
+**Fragile:** creating a new thread for each click has no central resource policy or shutdown path.
+
+```java
+new Thread(() -> loadData()).start();
+```
+
+**Prefer:** inject or own a bounded executor and shut it down with the application. Use `Task` when JavaFX progress, cancellation, and worker state are useful; use `CompletableFuture` or an executor for other workflows, but marshal UI updates with `Platform.runLater`.
+
+```java
+private final ExecutorService io = Executors.newFixedThreadPool(4);
+// In stop(): io.shutdownNow();
+```
+
+Do not blindly use a fixed pool for every workload: choose capacity and queueing according to the resource and service limits.
+
+### 10. Replacing windows for every view → deliberate navigation and lifecycle
+
+Creating a new `Stage` for every screen can produce confusing focus, ownership, and cleanup behavior. Use dialogs for transient decisions, and typically navigate within an owned window for the main workflow. If a secondary window is appropriate, set its owner and modality intentionally:
+
+```java
+var dialog = new Stage();
+dialog.initOwner(primaryStage);
+dialog.initModality(Modality.WINDOW_MODAL);
+dialog.setScene(new Scene(new Label("Details"), 320, 180));
+dialog.show();
+```
+
+### 11. Updating observable collections item-by-item → batch meaningful changes
+
+For large updates, avoid repeatedly clearing and repopulating a visible list when a single replacement communicates the change more cleanly:
+
+```java
+var replacement = FXCollections.observableArrayList(loadItems());
+items.setAll(replacement);
+```
+
+Perform loading off-thread, then apply the collection change on the FX thread. For very large data, use paging or incremental loading; batching alone does not make an unbounded dataset cheap.
+
+The modern approach is not “replace every listener,” “use FXML everywhere,” or “use the newest JDK feature.” Keep code simple, use public APIs, make lifecycle and thread ownership explicit, and test the actual target platforms.
+
 ## Practical checklist
 
 Before choosing JavaFX for a long-lived application, verify:
