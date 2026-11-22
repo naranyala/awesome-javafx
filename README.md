@@ -4,6 +4,23 @@ A focused guide to **JavaFX** desktop development: its UI model, modules, stylin
 
 JavaFX is a Java-based desktop toolkit for building rich cross-platform applications. It combines a retained-mode scene graph, controls, CSS, property binding, FXML, charts, media, WebView, animation, and graphics APIs in one coherent platform.
 
+## Contents
+
+- [Why JavaFX?](#why-javafx)
+- [Status and maturity](#status-and-maturity)
+- [Core mental model](#core-mental-model)
+- [Minimal implementation examples](#minimal-implementation-examples)
+- [JavaFX modules](#javafx-modules)
+- [Controls and layout](#controls-and-layout)
+- [Properties, bindings, and observable collections](#properties-bindings-and-observable-collections)
+- [FXML and controllers](#fxml-and-controllers)
+- [CSS and theming](#css-and-theming)
+- [Concurrency and background work](#concurrency-and-background-work)
+- [Packaging and deployment](#packaging-and-deployment)
+- [Testing and diagnostics](#testing-and-diagnostics)
+- [Ecosystem and library ideas](#ecosystem)
+- [Practical checklist](#practical-checklist)
+
 ## Why JavaFX?
 
 JavaFX is a strong choice when an application needs:
@@ -283,6 +300,46 @@ if (selected != null) {
 }
 ```
 
+## Getting started: project setup
+
+JavaFX is delivered separately from the JDK. Use a build tool to resolve platform-specific JavaFX artifacts rather than copying SDK jars into a project manually. Pin compatible JDK, OpenJFX, and plugin versions in the build, and verify the combination on each target OS and CPU architecture.
+
+### Gradle (Groovy DSL)
+
+A minimal `build.gradle` using the OpenJFX Gradle plugin:
+
+```groovy
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    // Add libraries used by the application here.
+}
+
+javafx {
+    version = '21.0.2'
+    modules = [ 'javafx.controls' ]
+}
+
+application {
+    mainClass = 'com.example.app/com.example.app.HelloApp'
+}
+```
+
+Use versions appropriate to your project; this is an illustrative configuration, not a claim that these are the latest releases. Run with `./gradlew run` after creating the Gradle wrapper. Include `javafx.fxml` when using FXML and declare other modules only when needed.
+
+A modular project should include `module-info.java` with the modules it uses and the package containing the application entry point exported or opened as required. For FXML reflection, `opens com.example.app to javafx.fxml;` is commonly needed for controller packages.
+
+### Maven
+
+For Maven, use the OpenJFX Maven plugin and declare the JavaFX modules as dependencies. OpenJFX artifacts are platform-aware; follow the plugin's current documentation for the target platform and module configuration. Typical launch command: `mvn clean javafx:run`.
+
+Keep build instructions synchronized with the actual project and plugin versions. Avoid presenting copied commands as universal: platform classifiers, module paths, and native packaging differ by JDK, OS, and architecture.
+
 ## JavaFX modules
 
 Common modules include:
@@ -302,6 +359,237 @@ Use only the modules needed by the application when creating a custom runtime wi
 
 ## Controls and layout
 
+The following bare-minimum layouts are intended to be placed inside `Application.start(Stage stage)`. They use standard controls and layout panes; imports are listed after the examples.
+
+### Vertical form
+
+```java
+var name = new TextField();
+name.setPromptText("Your name");
+
+var message = new Label("Enter your name");
+var greet = new Button("Greet");
+greet.setOnAction(event -> message.setText("Hello, " + name.getText()));
+
+var root = new VBox(10, name, greet, message);
+root.setPadding(new Insets(16));
+stage.setScene(new Scene(root, 300, 180));
+stage.show();
+```
+
+### Header, content, and footer
+
+```java
+var root = new BorderPane();
+root.setTop(new Label("My App"));
+root.setCenter(new TextArea());
+root.setBottom(new Button("Save"));
+BorderPane.setMargin(root.getTop(), new Insets(12));
+BorderPane.setMargin(root.getBottom(), new Insets(12));
+stage.setScene(new Scene(root, 400, 260));
+stage.show();
+```
+
+### Grid of labeled inputs
+
+```java
+var grid = new GridPane();
+grid.setHgap(10);
+grid.setVgap(10);
+grid.setPadding(new Insets(16));
+grid.addRow(0, new Label("Email"), new TextField());
+grid.addRow(1, new Label("Password"), new PasswordField());
+grid.add(new Button("Sign in"), 1, 2);
+stage.setScene(new Scene(grid, 360, 180));
+stage.show();
+```
+
+### List with selection
+
+```java
+var list = new ListView<String>();
+list.getItems().addAll("Java", "JavaFX", "Kotlin");
+var selected = new Label("Choose an item");
+list.getSelectionModel().selectedItemProperty().addListener(
+    (observable, oldValue, newValue) -> selected.setText("Selected: " + newValue)
+);
+stage.setScene(new Scene(new VBox(8, list, selected), 280, 240));
+stage.show();
+```
+
+### Tabs
+
+```java
+var tabs = new TabPane(
+    new Tab("Home", new Label("Welcome")),
+    new Tab("Settings", new CheckBox("Enable feature"))
+);
+tabs.getTabs().forEach(tab -> tab.setClosable(false));
+stage.setScene(new Scene(tabs, 360, 220));
+stage.show();
+```
+
+These snippets use `javafx.scene.Scene`, `javafx.stage.Stage`, `javafx.scene.control.*`, `javafx.scene.layout.*`, and `javafx.geometry.Insets`. They assume a recent Java version supporting local-variable type inference (`var`).
+
+### Toolbar and split work area
+
+```java
+var toolbar = new ToolBar(new Button("Open"), new Button("Save"));
+var navigation = new ListView<String>();
+navigation.getItems().addAll("Overview", "Documents", "Settings");
+var workArea = new TextArea("Work area");
+var split = new SplitPane(navigation, workArea);
+split.setDividerPositions(0.25);
+var root = new BorderPane(split);
+root.setTop(toolbar);
+stage.setScene(new Scene(root, 640, 400));
+stage.show();
+```
+
+### Master–detail view
+
+```java
+record Person(String name, String role) {}
+var people = FXCollections.observableArrayList(
+    new Person("Ada", "Engineer"), new Person("Grace", "Scientist"));
+var list = new ListView<>(people);
+list.setCellFactory(view -> new ListCell<>() {
+    @Override protected void updateItem(Person person, boolean empty) {
+        super.updateItem(person, empty);
+        setText(empty || person == null ? null : person.name());
+    }
+});
+var detail = new Label("Select a person");
+list.getSelectionModel().selectedItemProperty().addListener((obs, old, person) ->
+    detail.setText(person == null ? "Select a person" : person.name() + " — " + person.role()));
+stage.setScene(new Scene(new SplitPane(list, detail), 500, 280));
+stage.show();
+```
+
+### Searchable list
+
+```java
+var source = FXCollections.observableArrayList("Java", "JavaFX", "Kotlin", "Scala");
+var filtered = new FilteredList<>(source, value -> true);
+var search = new TextField();
+search.setPromptText("Filter…");
+search.textProperty().addListener((obs, old, text) -> {
+    var query = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+    filtered.setPredicate(value -> value.toLowerCase(Locale.ROOT).contains(query));
+});
+var list = new ListView<String>(filtered);
+stage.setScene(new Scene(new VBox(8, search, list), 300, 280));
+stage.show();
+```
+
+### Content with a status bar
+
+```java
+var status = new Label("Ready");
+var progress = new ProgressIndicator();
+progress.setVisible(false);
+var footer = new HBox(8, status, new Region(), progress);
+HBox.setHgrow(footer.getChildren().get(1), Priority.ALWAYS);
+footer.setPadding(new Insets(8));
+var root = new BorderPane(new TextArea("Content"));
+root.setBottom(footer);
+stage.setScene(new Scene(root, 500, 320));
+stage.show();
+```
+
+### Dashboard cards
+
+```java
+var cards = new TilePane(12, 12);
+cards.setPadding(new Insets(16));
+cards.setPrefColumns(2);
+for (var title : List.of("Revenue", "Users", "Orders", "Health")) {
+    var card = new VBox(8, new Label(title), new Label("—"));
+    card.setPadding(new Insets(16));
+    card.setStyle("-fx-border-color: lightgray; -fx-border-radius: 6;");
+    cards.getChildren().add(card);
+}
+stage.setScene(new Scene(new ScrollPane(cards), 420, 300));
+stage.show();
+```
+
+### Validated dialog-style form
+
+```java
+var email = new TextField();
+email.setPromptText("name@example.com");
+var submit = new Button("Submit");
+submit.disableProperty().bind(email.textProperty().isEmpty());
+var form = new VBox(10, new Label("Email"), email, submit);
+form.setPadding(new Insets(18));
+var dialog = new Dialog<Void>();
+dialog.setTitle("Contact details");
+dialog.getDialogPane().setContent(form);
+dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+submit.setOnAction(event -> dialog.close());
+dialog.showAndWait();
+```
+
+This is only a required-field check; real applications should validate format and show an accessible explanation of errors.
+
+### Menu-driven app with shortcut
+
+```java
+var open = new MenuItem("Open");
+open.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
+open.setOnAction(event -> System.out.println("Open requested"));
+var menuBar = new MenuBar(new Menu("File", open, new SeparatorMenuItem(), new MenuItem("Exit")));
+var root = new BorderPane(new Label("Main content"));
+root.setTop(menuBar);
+stage.setScene(new Scene(root, 480, 300));
+stage.show();
+```
+
+### Scrollable settings page
+
+```java
+var settings = new VBox(12,
+    new Label("Preferences"), new CheckBox("Launch at startup"),
+    new CheckBox("Show notifications"), new Label("Text size"),
+    new Slider(10, 24, 14));
+settings.setPadding(new Insets(16));
+stage.setScene(new Scene(new ScrollPane(settings), 360, 280));
+stage.show();
+```
+
+### Resize-aware layout
+
+```java
+var left = new Label("Navigation");
+var content = new TextArea("Resize the window");
+var root = new BorderPane(content);
+root.setLeft(left);
+BorderPane.setMargin(left, new Insets(12));
+// BorderPane and resizable controls allocate space as the window changes size.
+stage.setMinWidth(320);
+stage.setMinHeight(220);
+stage.setScene(new Scene(root, 640, 400));
+stage.show();
+```
+
+Prefer resizable layout panes and constraints over manually setting node coordinates or repeatedly rebuilding the scene when the window resizes.
+
+### Custom-drawn graphic with Canvas
+
+```java
+var canvas = new Canvas(320, 180);
+var g = canvas.getGraphicsContext2D();
+g.setFill(Color.LIGHTSKYBLUE);
+g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+g.setFill(Color.DARKBLUE);
+g.fillOval(120, 45, 80, 80);
+var root = new StackPane(canvas);
+stage.setScene(new Scene(root, 360, 220));
+stage.show();
+```
+
+Canvas is immediate-mode drawing: redraw when content changes. Use scene-graph nodes instead when individual shapes need built-in picking, accessibility, or independent layout. These examples additionally use `javafx.collections.*`, `java.util.*`, and `javafx.scene.canvas.Canvas` / `javafx.scene.paint.Color` as applicable.
+
 JavaFX includes controls for most conventional desktop applications:
 
 - buttons, toggle buttons, check boxes, radio buttons, sliders, spinners, and date pickers;
@@ -311,9 +599,80 @@ JavaFX includes controls for most conventional desktop applications:
 - charts including line, area, bar, bubble, scatter, pie, and stacked variants;
 - progress indicators, tooltips, separators, scroll panes, and custom controls.
 
-Common layout containers include `BorderPane`, `HBox`, `VBox`, `GridPane`, `FlowPane`, `TilePane`, `StackPane`, `AnchorPane`, `ScrollPane`, and `GridPane`-based form layouts.
+Common layout containers include `BorderPane`, `HBox`, `VBox`, `GridPane`, `FlowPane`, `TilePane`, `StackPane`, `AnchorPane`, and `ScrollPane`. Prefer layout constraints over fixed coordinates, and test resizing, localization, accessibility, and HiDPI.
 
-Prefer layout panes and constraints over fixed coordinates. Test with resizing, font scaling, localization, accessibility settings, and different DPI factors.
+### Compact reusable interaction patterns
+
+**Confirmation before a destructive action:**
+
+```java
+var remove = new Button("Delete");
+remove.setOnAction(event -> {
+    var answer = new Alert(Alert.AlertType.CONFIRMATION,
+        "Delete this item?", ButtonType.CANCEL, ButtonType.OK).showAndWait();
+    if (answer.orElse(ButtonType.CANCEL) == ButtonType.OK) deleteItem();
+});
+```
+
+**Show validation state without a modal dialog:**
+
+```java
+var input = new TextField();
+var error = new Label();
+var save = new Button("Save");
+var valid = Bindings.createBooleanBinding(
+    () -> input.getText() != null && input.getText().trim().length() >= 3,
+    input.textProperty());
+save.disableProperty().bind(valid.not());
+input.textProperty().addListener((obs, old, value) ->
+    error.setText(valid.get() ? "" : "Enter at least 3 characters"));
+```
+
+**Accessible icon button:**
+
+```java
+var refresh = new Button("⟳");
+refresh.setAccessibleText("Refresh data");
+refresh.setTooltip(new Tooltip("Refresh data"));
+refresh.setOnAction(event -> refreshData());
+```
+
+Give controls meaningful accessible text, preserve keyboard focus visibility, and do not communicate errors by color alone.
+
+### Debounced search
+
+A pause before filtering keeps expensive predicates from running on every keystroke. This example owns and stops its JavaFX `PauseTransition` with the view.
+
+```java
+var source = FXCollections.observableArrayList("Java", "JavaFX", "Kotlin");
+var filtered = new FilteredList<>(source, item -> true);
+var search = new TextField();
+var debounce = new PauseTransition(Duration.millis(250));
+search.textProperty().addListener((obs, old, value) -> debounce.playFromStart());
+debounce.setOnFinished(event -> {
+    var query = search.getText().strip().toLowerCase(Locale.ROOT);
+    filtered.setPredicate(item -> item.toLowerCase(Locale.ROOT).contains(query));
+});
+var list = new ListView<String>(filtered);
+```
+
+### File open with `FileChooser`
+
+```java
+var open = new Button("Open…");
+var text = new TextArea();
+open.setOnAction(event -> {
+    var file = new FileChooser().showOpenDialog(open.getScene().getWindow());
+    if (file == null) return; // user cancelled
+    try {
+        text.setText(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+    } catch (IOException ex) {
+        new Alert(Alert.AlertType.ERROR, "Could not open file: " + ex.getMessage()).showAndWait();
+    }
+});
+```
+
+For large files, do the read in a background task. Consider encoding, file size, and whether the application should preserve unsaved changes.
 
 ## Properties, bindings, and observable collections
 
@@ -340,6 +699,56 @@ Use properties at UI boundaries, not necessarily throughout the entire domain mo
 
 Avoid creating unnecessary bindings for large or frequently changing datasets. Profile listeners and collection updates when tables or charts become slow.
 
+### Editable table with typed columns
+
+```java
+record Product(StringProperty name, DoubleProperty price) {
+    Product(String name, double price) {
+        this(new SimpleStringProperty(name), new SimpleDoubleProperty(price));
+    }
+}
+var products = FXCollections.observableArrayList(
+    new Product("Notebook", 4.50), new Product("Pen", 1.25));
+var table = new TableView<Product>(products);
+var nameColumn = new TableColumn<Product, String>("Name");
+nameColumn.setCellValueFactory(cell -> cell.getValue().name());
+nameColumn.setCellFactory(TextFieldTableCell.forTableColumn());
+nameColumn.setOnEditCommit(event -> event.getRowValue().name().set(event.getNewValue()));
+var priceColumn = new TableColumn<Product, Number>("Price");
+priceColumn.setCellValueFactory(cell -> cell.getValue().price());
+table.getColumns().addAll(nameColumn, priceColumn);
+table.setEditable(true);
+```
+
+This uses mutable properties because cells need observable editable values. For larger datasets, page or load data incrementally instead of materializing everything in the table.
+
+### FXML loading with a controller
+
+```java
+// In Application.start:
+var loader = new FXMLLoader(getClass().getResource("/views/main.fxml"));
+var scene = new Scene(loader.load());
+stage.setScene(scene);
+stage.show();
+```
+
+```xml
+<!-- /views/main.fxml -->
+<VBox xmlns:fx="http://javafx.com/fxml" fx:controller="com.example.MainController" spacing="8">
+    <Label fx:id="message" text="Ready" />
+    <Button text="Run" onAction="#run" />
+</VBox>
+```
+
+```java
+public class MainController {
+    @FXML private Label message;
+    @FXML private void run() { message.setText("Running"); }
+}
+```
+
+In a named module, open the controller package to `javafx.fxml` in `module-info.java`. Handle loader exceptions as startup failures and avoid placing business logic in controllers.
+
 ## FXML and controllers
 
 FXML is an XML-based declarative format for describing a scene graph. It can make views easier to inspect, style, and edit separately from application logic.
@@ -357,6 +766,25 @@ Recommended practices:
 FXML is optional. Programmatic JavaFX views are often better for highly dynamic interfaces, generated UIs, or teams that prefer compile-time refactoring.
 
 ## CSS and theming
+
+### Runtime stylesheet switching
+
+```java
+var lightCss = Objects.requireNonNull(getClass().getResource("/light.css")).toExternalForm();
+var darkCss = Objects.requireNonNull(getClass().getResource("/dark.css")).toExternalForm();
+var scene = new Scene(new BorderPane(new Label("Theme demo")), 420, 260);
+scene.getStylesheets().add(lightCss);
+var toggle = new Button("Switch theme");
+toggle.setOnAction(event -> {
+    var styles = scene.getStylesheets();
+    styles.setAll(styles.contains(darkCss) ? lightCss : darkCss);
+});
+((BorderPane) scene.getRoot()).setTop(toggle);
+stage.setScene(scene);
+stage.show();
+```
+
+Define matching semantic style classes in both stylesheets; avoid scattering inline styles through application code.
 
 JavaFX CSS resembles web CSS but is not browser CSS. Selectors and properties are JavaFX-specific, and not every web CSS feature exists.
 
@@ -420,7 +848,67 @@ For production applications:
 - centralize error reporting and logging;
 - shut down executors, media, services, and native resources during application exit.
 
+A `Service` is reusable for repeated requests and exposes observable progress/state:
+
+```java
+var loader = new Service<String>() {
+    @Override protected Task<String> createTask() {
+        return new Task<>() {
+            @Override protected String call() throws Exception {
+                updateMessage("Loading…");
+                return loadData(); // blocking work; check isCancelled() when appropriate
+            }
+        };
+    }
+};
+var status = new Label();
+status.textProperty().bind(loader.messageProperty());
+var progress = new ProgressIndicator();
+progress.progressProperty().bind(loader.progressProperty());
+var cancel = new Button("Cancel");
+cancel.setOnAction(event -> loader.cancel());
+loader.setOnSucceeded(event -> showData(loader.getValue()));
+loader.setOnFailed(event -> reportError(loader.getException()));
+loader.start();
+```
+
+Configure an executor for the service as appropriate, and call `shutdown()` on application-owned executors during `stop()`. Task handlers run on the FX thread; `Task.call()` runs in the background.
+
 `CompletableFuture`, virtual threads, reactive libraries, and structured concurrency can be used, but their completion callbacks must be marshalled back to the JavaFX thread before touching UI state.
+
+## Modern Java and experimental JavaFX
+
+JavaFX is a useful playground for modern Java—not just a way to place controls on a window. Keep experiments in small, reversible slices, measure before optimizing, and distinguish stable Java SE features from preview or incubator APIs. Preview features require explicit compiler/runtime flags and can change between JDK releases; do not make them a production dependency without a deliberate upgrade plan.
+
+### Language and API experiments
+
+- **Records** make concise immutable view models and table-row values. Keep mutable JavaFX properties in presentation models when binding/editing is required; records are not observable by themselves.
+- **Sealed types and pattern matching** can model navigation commands, dialog results, and domain outcomes as closed sets. Convert them to UI state at the presentation boundary.
+- **`var`, switch expressions, and text blocks** can reduce ceremony in controllers, test fixtures, and SQL/JSON templates. Prefer explicit types where JavaFX generic inference or event-handler types would otherwise be unclear.
+- **Virtual threads** (JDK 21+) can simplify blocking I/O workflows. They do not make CPU-bound work faster, remove cancellation requirements, or permit touching controls off the FX thread. Bound resource-heavy operations and marshal results to the UI thread.
+- **Structured concurrency and scoped values** are evolving across JDK releases. Check their status in the exact JDK you target; APIs may be preview/incubator and should be isolated behind application-owned abstractions.
+- **Foreign Function & Memory API** (final in JDK 22) enables safer native interop than JNI for many use cases, but native ABI, lifetime, threading, and platform packaging remain your responsibility.
+
+### UI experiments worth building
+
+Try a command palette, keyboard-first navigation, live theme editor, CSS inspector, drag-and-drop workflow canvas, node-graph editor, timeline, data explorer, or a custom control with a documented skin. Use `Canvas` for immediate-mode drawing and `Node`/`Shape` for scene-graph interaction; benchmark the choice with realistic workloads.
+
+For high-throughput views, experiment with virtualized controls, paging, incremental loading, immutable snapshots, and batched observable-list updates. Avoid rebuilding the entire scene graph on every event. Profile pulse/layout/render behavior and memory use before introducing custom rendering or caches.
+
+### Data, AI, and live systems
+
+JavaFX can host dashboards and interactive clients for local models, remote AI services, telemetry, simulations, and streaming data. Keep network/model work in services, expose progress and cancellation, debounce expensive searches, and avoid placing secrets in the client. Treat streamed output as untrusted input, and use bounded queues or coalescing so producers cannot overwhelm the UI event thread.
+
+### A safe experimentation loop
+
+1. State the user-visible hypothesis and define a measurable success criterion.
+2. Build a small vertical slice using public JavaFX APIs.
+3. Test keyboard, accessibility, resizing, HiDPI, and target operating systems early.
+4. Measure startup, responsiveness, memory, and rendering with representative data.
+5. Check licensing, maintenance, security, and runtime packaging before adopting dependencies.
+6. Record JDK/OpenJFX versions and flags, especially for preview APIs, and keep a fallback path.
+
+Experimental interfaces still need focus handling, accessible names, predictable cancellation, and recoverable errors. Novelty is not a substitute for usability or maintainability.
 
 ## Tables, trees, and large data
 
@@ -598,6 +1086,67 @@ Modules are optional for JavaFX projects but useful for strong encapsulation and
 Use `jdeps`, `jlink`, and `jpackage` as part of release automation. Verify reflection, FXML resources, service loading, fonts, native libraries, and WebView/media modules in the final image.
 
 ## Testing and diagnostics
+
+### Test application logic separately from the UI
+
+Keep business logic in ordinary Java classes so it can be tested without starting the JavaFX toolkit:
+
+```java
+final class NameValidator {
+    boolean isValid(String name) {
+        return name != null && name.strip().length() >= 3;
+    }
+}
+```
+
+```java
+@Test
+void rejectsShortNames() {
+    var validator = new NameValidator();
+    assertFalse(validator.isValid("Al"));
+    assertTrue(validator.isValid("Ada"));
+}
+```
+
+For tests that construct controls, initialize JavaFX once using the test framework's supported JavaFX launcher/extension, and perform UI access on the FX thread. Avoid arbitrary sleeps; wait for explicit conditions and close windows/resources after each test. Headless execution may require a virtual display depending on the platform and test tooling.
+
+### Minimal scene navigation
+
+For a small application, replace the root of one `Scene` rather than creating an unmanaged window for every view:
+
+```java
+var scene = new Scene(new Label("Home"), 480, 300);
+var home = new Button("Home");
+var settings = new Button("Settings");
+var navigation = new HBox(8, home, settings);
+var root = new BorderPane(new Label("Home"));
+root.setTop(navigation);
+scene.setRoot(root);
+home.setOnAction(event -> root.setCenter(new Label("Home")));
+settings.setOnAction(event -> root.setCenter(new CheckBox("Enable option")));
+stage.setScene(scene);
+stage.show();
+```
+
+For larger apps, use a navigation service or view factory and define how view state, focus, and resources are preserved or disposed.
+
+### Save a file safely
+
+```java
+var save = new Button("Save…");
+save.setOnAction(event -> {
+    var file = new FileChooser().showSaveDialog(save.getScene().getWindow());
+    if (file == null) return;
+    try {
+        Files.writeString(file.toPath(), textArea.getText(), StandardCharsets.UTF_8);
+    } catch (IOException ex) {
+        new Alert(Alert.AlertType.ERROR, "Could not save file: " + ex.getMessage()).showAndWait();
+    }
+});
+```
+
+For important data, consider writing to a temporary file and moving it into place, handling overwrite confirmation, and running the operation off the FX thread for large content.
+
 
 Keep most application logic testable without starting JavaFX. Then add focused UI and packaging tests.
 
